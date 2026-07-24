@@ -20,10 +20,10 @@ Each phase has tasks and a **Definition of Done (DoD)** gate at the end. A task 
 
 ## Phase 0 — Foundation & scaffolding
 
-- [ ] Next.js 15 project scaffolded, runs locally, committed to git with a real README
-- [ ] MongoDB connection working (Atlas or local), one test document written and read back
-- [ ] Cloudinary account configured, one manual test image uploaded and delivered via URL
-- [ ] NextAuth wired with at least one provider; can sign in and see a session
+- [X] Next.js 15 project scaffolded, runs locally, committed to git with a real README
+- [X] MongoDB connection working (Atlas or local), one test document written and read back
+- [X] Cloudinary account configured, one manual test image uploaded and delivered via URL
+- [~] NextAuth wired with at least one provider; can sign in and see a session
 - [ ] Data model drafted: `User`, `Image` (stores Cloudinary URL, pHash value, dominant-color palette, owner, timestamps)
 
 **DoD gate 0:** A logged-in user exists in the DB, and a hard-coded image record can be created and fetched through a route handler. If you can't prove sign-in + one DB round-trip, do not proceed.
