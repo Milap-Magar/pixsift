@@ -9,6 +9,16 @@ const nextConfig: NextConfig = {
     // "Root directory" docs for why files outside the root aren't resolved.
     root: __dirname,
   },
+
+  experimental: {
+    serverActions: {
+      // Uploads go through a Server Action, and action bodies are capped at 1MB
+      // by default — far too small for a photo. This is the ceiling we also
+      // enforce in lib/cloudinary.ts, kept slightly higher so our own check is
+      // the one that produces a friendly error.
+      bodySizeLimit: "12mb",
+    },
+  },
 };
 
 export default nextConfig;

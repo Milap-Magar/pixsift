@@ -1,38 +1,40 @@
-// A LOGIN PAGE. This is a Server Component (no "use client" at the top), so it
-// can safely call server-only auth functions.
+// The /login ROUTE still exists even though signing in is normally a dialog now.
+// It's the fallback for three cases:
+//   - Auth.js redirects here itself (`pages.signIn` in auth.ts)
+//   - someone opens the URL directly or has it bookmarked
+//   - JavaScript hasn't loaded, so no dialog can open
 //
-// The button lives inside a <form> whose `action` is an inline Server Action
-// (note the "use server" directive). When submitted, it runs ON THE SERVER and
-// kicks off the Google OAuth redirect. This is the Auth.js v5 pattern — no
-// client-side JavaScript needed to start a login.
+// It renders the same card over the same live photo wall as <LoginDialog>, so
+// both paths look identical.
 
-import { signIn, auth } from "@/auth";
 import { redirect } from "next/navigation";
 
+import LoginCard from "@/app/components/login-card";
+import PhotoWall from "@/app/components/photo-wall";
+import { currentUser } from "@/lib/session";
+
 export default async function LoginPage() {
-  // If already signed in, don't show the login form — go to the profile.
-  const session = await auth();
-  if (session?.user) redirect("/profile");
+  // Already signed in? Nothing to do here.
+  const user = await currentUser();
+  if (user) redirect("/dashboard");
 
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-6 p-8">
-      <h1 className="text-2xl font-semibold">Sign in to PixSift</h1>
+    <main className="relative flex flex-1 items-center justify-center overflow-hidden p-6">
+      <PhotoWall className="scale-105 opacity-50 blur-[3px] saturate-125" />
+      {/* The scrim that dims the photos down behind the card. */}
+      <div className="pointer-events-none absolute inset-0 bg-black/70" />
 
-      <form
-        action={async () => {
-          "use server";
-          // "google" matches the provider id in auth.ts.
-          // redirectTo = where the user lands after a successful login.
-          await signIn("google", { redirectTo: "/profile" });
-        }}
-      >
-        <button
-          type="submit"
-          className="rounded-full border border-black/10 bg-black px-6 py-3 text-white transition hover:opacity-90 dark:bg-white dark:text-black"
-        >
-          Continue with Google
-        </button>
-      </form>
+      <div className="relative z-10 w-100 max-w-[calc(100vw-2rem)] rounded-3xl border border-white/15 bg-background/95 p-8 shadow-2xl shadow-black/40 backdrop-blur-xl">
+        <LoginCard
+          redirectTo="/dashboard"
+          title={<h1 className="text-2xl leading-tight font-semibold">Welcome to PixSift</h1>}
+          description={
+            <p className="text-sm text-muted-foreground">
+              Sign in to start pinning what you love.
+            </p>
+          }
+        />
+      </div>
     </main>
   );
 }

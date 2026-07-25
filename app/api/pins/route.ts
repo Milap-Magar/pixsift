@@ -4,8 +4,8 @@
 // public endpoint).
 
 import { type NextRequest } from "next/server";
-import { auth } from "@/auth";
 import { getPins, addPin } from "@/lib/pins";
+import { currentUser } from "@/lib/session";
 
 // GET /api/pins  — PUBLIC. Anyone can list pins.
 export async function GET() {
@@ -14,9 +14,9 @@ export async function GET() {
 
 // POST /api/pins — PROTECTED. Must be logged in to add a pin.
 export async function POST(request: NextRequest) {
-  // 1. Who is calling? `auth()` reads the session from the request cookie.
-  const session = await auth();
-  if (!session?.user) {
+  // 1. Who is calling? `currentUser()` reads the session from the request cookie.
+  const user = await currentUser();
+  if (!user) {
     // 401 = "you're not authenticated". The frontend uses this to send the
     // user to /login.
     return Response.json({ error: "You must be signed in to add a pin." }, { status: 401 });
@@ -40,7 +40,8 @@ export async function POST(request: NextRequest) {
   const pin = addPin({
     title,
     imageUrl,
-    author: session.user.name ?? session.user.email ?? "Unknown",
+    author: user.name,
+    authorId: user.id,
   });
 
   return Response.json({ pin }, { status: 201 });
