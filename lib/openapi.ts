@@ -124,11 +124,36 @@ export const openApiSpec = {
     "/api/pins": {
       get: {
         tags: ["Pins"],
-        summary: "List all pins (public)",
-        description: "Anyone can view pins. No authentication required.",
+        summary: "List public pins",
+        description:
+          "Anyone can view pins. No authentication required — and PUBLIC pins " +
+          "only, even with a session, because this response is cacheable. Your " +
+          "own private pins are on /dashboard and /profile.",
+        parameters: [
+          {
+            name: "cursor",
+            in: "query",
+            required: false,
+            schema: { type: "string" },
+            description: "Opaque cursor from a previous page's `nextCursor`.",
+          },
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            schema: { type: "integer", default: 24, maximum: 100 },
+          },
+          {
+            name: "author",
+            in: "query",
+            required: false,
+            schema: { type: "string" },
+            description: "Only this author's public pins.",
+          },
+        ],
         responses: {
           "200": {
-            description: "The pins",
+            description: "One page of pins, newest first",
             content: {
               "application/json": {
                 schema: {
@@ -144,8 +169,14 @@ export const openApiSpec = {
                           imageUrl: { type: "string" },
                           author: { type: "string" },
                           createdAt: { type: "number" },
+                          visibility: { type: "string", enum: ["public", "private"] },
                         },
                       },
+                    },
+                    nextCursor: {
+                      type: "string",
+                      nullable: true,
+                      description: "Pass as `cursor` for the next page. `null` at the end.",
                     },
                   },
                 },
@@ -173,6 +204,15 @@ export const openApiSpec = {
                     type: "string",
                     example: "https://picsum.photos/seed/sunset/500/700",
                   },
+                  description: { type: "string" },
+                  visibility: {
+                    type: "string",
+                    enum: ["public", "private"],
+                    default: "public",
+                    description:
+                      "`private` keeps the pin out of the feed, search and " +
+                      "recommendations — only its author can see it.",
+                  },
                 },
               },
             },
@@ -180,7 +220,7 @@ export const openApiSpec = {
         },
         responses: {
           "201": { description: "Pin created" },
-          "400": { description: "Missing title or imageUrl" },
+          "400": { description: "Missing title, or imageUrl isn't an http(s) URL" },
           "401": { description: "Not signed in" },
         },
       },

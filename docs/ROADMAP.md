@@ -7,11 +7,12 @@ isn't in here — nothing below competes with it. This is the product around it.
 
 **Legend:** `[ ]` todo · **S** ≈ a few hours · **M** ≈ 1–3 days · **L** ≈ a week+
 
-> **One standing caveat.** Everything is still in JavaScript arrays
-> (`lib/pins.ts`, `lib/comments.ts`) and **dies on server restart** —
-> `MONGODB_CONNECT_URL` is in `.env` and never imported. Anything below marked
-> 🗄️ needs a schema, so building it before MongoDB means building it twice.
-> Everything else is safe to do now.
+> **One standing caveat.** **Pins now live in MongoDB** — `lib/db/pins.ts` owns
+> the document shape, the indexes and every query, and every page and route reads
+> through it. **Favourites and comments are still JavaScript arrays**
+> (`lib/pins.ts`, `lib/comments.ts`) and still **die on server restart**. Items
+> below marked 🗄️ that concern saves or comments still need a schema first;
+> anything about pins can now be built directly.
 
 ---
 
@@ -52,8 +53,13 @@ Real defects in the code today, not hypotheticals. Roughly worst first.
 - [ ] **Author names aren't clickable.** `pin.author` is plain text in
       `pin-card.tsx:49` and `pin/[id]/page.tsx:134`. Authorship is a dead end —
       you see a name and can do nothing with it — **S**
-- [ ] **No pagination anywhere.** `/`, `/discover`, `/most-popular` all render
-      *every* pin in the database. Fine at 14, unusable at 500 — **M** 🗄️
+- [X] **`/` pages properly** — cursor-based, database then Pixabay behind one
+      opaque cursor. See `lib/feed.ts` and [`INFINITE-SCROLL.md`](./INFINITE-SCROLL.md)
+- [ ] **`/discover` and `/most-popular` still load the whole catalogue** — now
+      capped at `MAX_SCAN` (500) in `lib/db/pins.ts` rather than unbounded, but
+      both compute over every row: Discover needs corpus-wide term frequencies and
+      the leaderboard re-sorts by score. Past a few hundred pins these need a
+      precomputed term table and a stored score — **M** 🗄️
 - [ ] **Comments are a fixed 384px scroll box** with no "load older" — every
       comment ever is in the DOM — **S** 🗄️
 
@@ -152,6 +158,11 @@ plumbing all exists — these are mostly presentation.
       list. The single biggest "this is actually Pinterest" feature — **L** 🗄️
 - [ ] **Board cover images**, auto-picked or chosen — **S** 🗄️
 - [ ] **Secret boards** — private to you — **S** 🗄️
+      Per-*pin* privacy already exists: every pin carries `visibility`
+      (`public` | `private`), enforced in one place — `visibleTo()` in
+      `lib/db/pins.ts` — and toggled from the pin's own page. A secret board is
+      the same idea one level up, and should reuse that filter rather than invent
+      a second rule
 - [ ] **Collaborative boards** — invite others to add — **M** 🗄️
 - [ ] **Sections within a board** — **M** 🗄️
 - [ ] **Drag to reorder** within a board — **M** 🗄️

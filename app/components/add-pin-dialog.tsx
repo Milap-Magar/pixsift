@@ -12,9 +12,10 @@
 // behind the dialog by the time it closes.
 
 import { useActionState, useRef, useState } from "react";
-import { ImagePlus, Link2, LoaderCircle, Upload, X } from "lucide-react";
+import { Globe, ImagePlus, Link2, LoaderCircle, Lock, Upload, X } from "lucide-react";
 
 import { createPinAction, type CreatePinState } from "@/app/actions/pins";
+import { DEFAULT_VISIBILITY, VISIBILITIES, type Visibility } from "@/lib/visibility";
 import { buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
@@ -54,6 +55,7 @@ export default function AddPinDialog({
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>(uploadEnabled ? "upload" : "link");
   const [imageUrl, setImageUrl] = useState("");
+  const [visibility, setVisibility] = useState<Visibility>(DEFAULT_VISIBILITY);
   const formRef = useRef<HTMLFormElement>(null);
 
   const [state, formAction, pending] = useActionState<CreatePinState, FormData>(
@@ -64,6 +66,7 @@ export default function AddPinDialog({
       const result = await createPinAction(previousState, formData);
       if (result.createdId) {
         setImageUrl("");
+        setVisibility(DEFAULT_VISIBILITY);
         formRef.current?.reset();
         setOpen(false);
       }
@@ -174,6 +177,46 @@ export default function AddPinDialog({
                 className={cn(inputClasses, "h-auto resize-none py-2")}
               />
             </label>
+
+            {/* Who gets to see it. A hidden input carries the value, so the
+                Server Action reads it out of FormData like every other field —
+                the segmented buttons are just a nicer <input type="radio">. */}
+            <fieldset className="flex flex-col gap-1.5">
+              <legend className="mb-1.5 text-sm font-medium">Who can see it</legend>
+              <input type="hidden" name="visibility" value={visibility} />
+
+              <div className="flex gap-1 rounded-full bg-muted p-1">
+                {VISIBILITIES.map((option) => {
+                  const active = option.value === visibility;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setVisibility(option.value)}
+                      aria-pressed={active}
+                      className={cn(
+                        "flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition",
+                        active
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {option.value === "private" ? (
+                        <Lock className="size-3.5" />
+                      ) : (
+                        <Globe className="size-3.5" />
+                      )}
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                {VISIBILITIES.find((option) => option.value === visibility)?.hint}
+                {visibility === "private" && " You can flip it any time from the pin's page."}
+              </p>
+            </fieldset>
 
             {state.error ? (
               <p role="alert" className="text-sm text-destructive">

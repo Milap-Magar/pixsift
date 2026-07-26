@@ -14,6 +14,7 @@ import { type NextRequest } from "next/server";
 
 import { AlreadySavedError, createPin, listPins, searchPins } from "@/lib/db/pins";
 import { currentUser } from "@/lib/session";
+import { parseVisibility } from "@/lib/visibility";
 
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
@@ -21,26 +22,35 @@ export async function GET(request: NextRequest) {
   const limitParam = Number(params.get("limit"));
   const limit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : undefined;
 
+  // Signed in, you also see your own private pins — which makes the response
+  // viewer-specific, and therefore not something a shared cache may keep. The
+  // two branches below are the same query with two different cache headers, and
+  // getting that pairing wrong is precisely how a private pin leaks.
+  const user = await currentUser();
+
+  const cacheHeaders = user
+    ? { "Cache-Control": "private, no-store" }
+    : {
+        // The public feed changes only when someone adds a pin. A short
+        // shared-cache window absorbs bursts, and `stale-while-revalidate` means
+        // the refresh happens behind an already-served response.
+        "Cache-Control": "public, s-maxage=30, stale-while-revalidate=300",
+      };
+
   try {
     if (q) {
-      const pins = await searchPins(q, limit);
-      return Response.json({ pins, nextCursor: null });
+      const pins = await searchPins(q, { limit, viewerId: user?.id });
+      return Response.json({ pins, nextCursor: null }, { headers: cacheHeaders });
     }
 
     const page = await listPins({
       limit,
       cursor: params.get("cursor"),
       authorId: params.get("author") ?? undefined,
+      viewerId: user?.id,
     });
 
-    return Response.json(page, {
-      headers: {
-        // The feed changes only when someone adds a pin. A short shared-cache
-        // window in front of it absorbs bursts, and `stale-while-revalidate`
-        // means the refresh happens behind an already-served response.
-        "Cache-Control": "public, s-maxage=30, stale-while-revalidate=300",
-      },
-    });
+    return Response.json(page, { headers: cacheHeaders });
   } catch (error) {
     console.error("GET /api/dashboard failed:", error);
     return Response.json({ error: "Failed to fetch pins." }, { status: 500 });
@@ -68,6 +78,7 @@ export async function POST(request: NextRequest) {
     providerPageUrl?: string;
     credit?: string;
     tags?: string[];
+    visibility?: string;
   };
 
   try {
@@ -102,6 +113,7 @@ export async function POST(request: NextRequest) {
       providerPageUrl: body.providerPageUrl?.trim(),
       credit: body.credit?.trim(),
       tags: body.tags?.map((tag) => tag.trim().toLowerCase()).filter(Boolean),
+      visibility: parseVisibility(body.visibility),
     });
 
     return Response.json({ pin }, { status: 201 });

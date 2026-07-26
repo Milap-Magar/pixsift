@@ -18,8 +18,9 @@ import SiteHeader from "@/app/components/site-header";
 import UserAvatar from "@/app/components/user-avatar";
 import { buttonVariants } from "@/components/ui/button";
 import { countCommentsByAuthor } from "@/lib/comments";
+import { getPinsByIds, listPins } from "@/lib/db/pins";
 import { timeAgo } from "@/lib/format";
-import { getFavoriteIds, getFavoritePins, getPinsByAuthor } from "@/lib/pins";
+import { getFavoriteIds } from "@/lib/pins";
 import { currentUser } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
@@ -47,15 +48,21 @@ export default async function ProfilePage({
   const { tab } = await searchParams;
   const activeTab: TabKey = isTabKey(tab) ? tab : "pins";
 
-  const myPins = getPinsByAuthor(user.id);
-  const savedPins = getFavoritePins(user.id);
   const favoriteIds = [...getFavoriteIds(user.id)];
   const commentCount = countCommentsByAuthor(user.id);
 
+  // Your own board, so `viewerId` is you: private pins are included here even
+  // though nobody else can see them.
+  const [mine, savedPins] = await Promise.all([
+    listPins({ authorId: user.id, viewerId: user.id, limit: 100 }),
+    getPinsByIds(favoriteIds, user.id),
+  ]);
+
+  const myPins = mine.pins;
   const pins = activeTab === "saved" ? savedPins : myPins;
 
-  // "Member since" is only as good as our in-memory store, so derive it from the
-  // oldest pin rather than inventing a signup date we never recorded.
+  // We never recorded a signup date, so "first pin" is derived from the oldest
+  // pin on this page rather than invented. Newest-first, so that's the last one.
   const oldestPin = myPins.at(-1);
 
   return (

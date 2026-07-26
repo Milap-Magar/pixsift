@@ -13,6 +13,14 @@
 //
 // Handing the caller one cursor instead of two means the transition between the
 // two sources is invisible — no "end of your pins" seam, no second scroller.
+//
+// PUBLIC PINS ONLY, deliberately. `listPins` is called without a `viewerId`, so
+// the database half never contains a private pin — not even your own. That's not
+// a limitation to fix later: /api/feed serves this with `s-maxage`, so a page of
+// it can be held by a shared cache and handed to the next visitor. A
+// viewer-specific feed behind a viewer-agnostic cache key is how a private pin
+// ends up on a stranger's screen. Your private pins live on /dashboard and
+// /profile, which are rendered per request.
 
 import { listPins, type SavedPin } from "@/lib/db/pins";
 import { isPixabayConfigured, searchImages, type PixabayImage } from "@/lib/pixabay";

@@ -15,7 +15,8 @@ import PinGrid from "@/app/components/pin-grid";
 import SiteHeader from "@/app/components/site-header";
 import { buttonVariants } from "@/components/ui/button";
 import { isCloudinaryConfigured } from "@/lib/cloudinary";
-import { getFavoriteIds, getFavoritePins, getPins, getPinsByAuthor } from "@/lib/pins";
+import { getPinsByIds, listAllPins, listPins } from "@/lib/db/pins";
+import { getFavoriteIds } from "@/lib/pins";
 import { currentUser } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
@@ -44,14 +45,25 @@ export default async function DashboardPage({
   const activeTab: TabKey = isTabKey(tab) ? tab : "all";
 
   const favoriteIds = [...getFavoriteIds(user.id)];
-  const myPins = getPinsByAuthor(user.id);
-  const savedPins = getFavoritePins(user.id);
 
-  const pins =
-    activeTab === "mine" ? myPins : activeTab === "saved" ? savedPins : getPins();
+  // Three independent reads, so they go in parallel rather than one after
+  // another — `await`ing them in sequence would add up all three round trips to
+  // Atlas for no reason.
+  //
+  // `viewerId` is what makes your own private pins show up here: MongoDB returns
+  // every public pin plus everything of yours. See `visibleTo` in lib/db/pins.ts.
+  const [allPins, mine, savedPins] = await Promise.all([
+    listAllPins({ viewerId: user.id }),
+    listPins({ authorId: user.id, viewerId: user.id, limit: 100 }),
+    getPinsByIds(favoriteIds, user.id),
+  ]);
+
+  const myPins = mine.pins;
+
+  const pins = activeTab === "mine" ? myPins : activeTab === "saved" ? savedPins : allPins;
 
   const counts: Record<TabKey, number> = {
-    all: getPins().length,
+    all: allPins.length,
     mine: myPins.length,
     saved: savedPins.length,
   };

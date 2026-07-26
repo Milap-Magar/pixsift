@@ -55,6 +55,10 @@ try {
       width: seed.width,
       height: seed.height,
       source: "seed" as const,
+      // The starter gallery is the public demo, so it's public. Note that
+      // --force would push this back onto a seed pin you'd since made private;
+      // the default (`$setOnInsert`) never touches an existing row.
+      visibility: "public" as const,
     };
 
     // Cloudinary hasn't got this one yet — leave publicId unset rather than

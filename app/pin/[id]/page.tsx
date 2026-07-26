@@ -11,7 +11,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Download, Share2 } from "lucide-react";
+import { ArrowLeft, Download, Lock, Share2 } from "lucide-react";
 
 import { cdnImage } from "@/lib/cloudinary-url";
 import CommentThread from "@/app/components/comment-thread";
@@ -20,18 +20,26 @@ import PinGrid from "@/app/components/pin-grid";
 import SharePanel from "@/app/components/share-panel";
 import SiteHeader from "@/app/components/site-header";
 import { getComments } from "@/lib/comments";
+import { getPinById, listAllPins } from "@/lib/db/pins";
 import { timeAgo } from "@/lib/format";
-import { getFavoriteIds, getPin, getPins } from "@/lib/pins";
+import { getFavoriteIds } from "@/lib/pins";
 import { relatedPins } from "@/lib/recommend";
 import { currentUser } from "@/lib/session";
 import { cn } from "@/lib/utils";
+import VisibilityToggle from "@/app/components/visibility-toggle";
 
 const actionButtonClasses =
   "flex h-10 cursor-pointer items-center gap-2 rounded-full border border-border px-4 text-sm font-medium transition hover:bg-muted";
 
+/**
+ * Metadata is deliberately PUBLIC-only: no viewer is passed, so a private pin
+ * gets the "not found" title. Page metadata is what leaks into link previews and
+ * crawlers, and a private pin's title showing up in an unfurled Slack link would
+ * defeat the point even though the page itself refuses to render.
+ */
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const pin = getPin(id);
+  const pin = await getPinById(id);
   if (!pin) return { title: "Pin not found · PixSift" };
 
   return {
@@ -48,15 +56,21 @@ export default async function PinDetailsPage({
 }) {
   const { id } = await params;
 
-  const pin = getPin(id);
+  // The session comes first, because whether this pin EXISTS as far as the
+  // request is concerned depends on who's asking: a private pin resolves for its
+  // author and 404s for everyone else. Same answer as a deleted pin, on purpose —
+  // a distinct "403 Forbidden" would confirm the pin is real.
+  const user = await currentUser();
+
+  const pin = await getPinById(id, user?.id);
   if (!pin) notFound();
 
-  const user = await currentUser();
   const favoriteIds = user ? [...getFavoriteIds(user.id)] : [];
   const comments = getComments(pin.id);
+  const isOwner = user?.id === pin.authorId;
 
   // ⬇ The algorithm's output. Swap the implementation in lib/recommend.ts.
-  const related = relatedPins(pin, getPins());
+  const related = relatedPins(pin, await listAllPins({ viewerId: user?.id }));
 
   // Resolved server-side so the share links are identical in both renders.
   const requestHeaders = await headers();
@@ -112,6 +126,11 @@ export default async function PinDetailsPage({
                 Download
               </a>
 
+              {/* Only the author gets this, and the Server Action behind it
+                  re-checks ownership — the missing button is the courtesy, the
+                  check in updatePinVisibility is the rule. */}
+              {isOwner && <VisibilityToggle pinId={pin.id} visibility={pin.visibility} />}
+
               <SharePanel
                 title={pin.title}
                 shareUrl={shareUrl}
@@ -121,6 +140,14 @@ export default async function PinDetailsPage({
                 Share
               </SharePanel>
             </div>
+
+            {pin.visibility === "private" && (
+              <p className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900">
+                <Lock className="size-3.5 shrink-0" />
+                This pin is private — nobody else can open this page, and it stays out
+                of the feed, search and recommendations.
+              </p>
+            )}
 
             <div>
               <h1 className="text-3xl leading-tight font-semibold">{pin.title}</h1>

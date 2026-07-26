@@ -11,7 +11,7 @@
 // what anyone else was typing.
 
 import { addComment, MAX_COMMENT_LENGTH, type Comment } from "@/lib/comments";
-import { getPin } from "@/lib/pins";
+import { getPinById } from "@/lib/db/pins";
 import { currentUser } from "@/lib/session";
 
 export type AddCommentResult = {
@@ -26,7 +26,9 @@ export async function addCommentAction(
   const user = await currentUser();
   if (!user) return { error: "Sign in to join the conversation." };
 
-  if (!getPin(pinId)) return { error: "That pin no longer exists." };
+  // Viewer-aware, so you can comment on your own private pin but can't post to
+  // one you were never allowed to open.
+  if (!(await getPinById(pinId, user.id))) return { error: "That pin no longer exists." };
 
   const trimmed = body.trim();
   if (!trimmed) return { error: "Write something first." };

@@ -1,20 +1,26 @@
-// ── A tiny in-memory "database" of pins + favourites ────────────────────────
-// This lives in server memory. It's perfect for learning, but note:
-//   - It RESETS every time the dev server restarts.
-//   - It is NOT shared across multiple server instances (e.g. in production).
-// The natural next step is to swap these functions for real MongoDB queries
-// (you already have a connection string in .env) — the rest of the app won't
-// need to change, because everything goes through these helpers.
+// ── The shared `Pin` shape, and an in-memory store of FAVOURITES ────────────
+//
+// Pins themselves live in MongoDB — see lib/db/pins.ts, which owns the document
+// shape, the indexes and every query. This file used to hold an in-memory array
+// of pins as well, and that array was a bug with a plausible disguise: uploads
+// were written into it while the feed read from Mongo, so a photo you'd just
+// uploaded appeared to save and then simply wasn't anywhere. One store, one
+// answer — that's why the array is gone.
+//
+// What's left:
+//   `Pin`         the shape components render. MongoDB's `SavedPin` extends it.
+//   `seedImageUrl` where a seed image actually lives (Cloudinary, or a fallback).
+//   favourites     userId -> the pin ids they saved.
+//
+// The favourites map is still in memory, with the usual caveats: it RESETS on
+// restart and is NOT shared between server instances. That's fine for learning,
+// and it's the next thing worth moving — a `favorites` collection of
+// `{ userId, pinId, savedAt }` would also give /most-popular a real "this week"
+// window, which it can't have while saves carry no timestamps.
 
-import {
-  DEMO_ACTIVITY_ENABLED,
-  SEED_AUTHOR,
-  SEED_FAVORITES,
-  SEED_PINS,
-  daysAgo,
-  type SeedPin,
-} from "./seed-data";
+import { DEMO_ACTIVITY_ENABLED, SEED_FAVORITES, type SeedPin } from "./seed-data";
 import { SEED_MANIFEST } from "./seed-manifest";
+import type { Visibility } from "./visibility";
 
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
 
@@ -32,11 +38,19 @@ export type Pin = {
   publicId?: string;
   width?: number;
   height?: number;
+
+  /**
+   * Public or private. Optional here and required on `SavedPin`, so a component
+   * can render a plain `Pin` (a test fixture, a Pixabay result being previewed)
+   * without inventing a visibility for it.
+   *
+   * Cards use this only to draw the "Private" badge. Whether you're allowed to
+   * see the pin at all was decided by the query that loaded it.
+   */
+  visibility?: Visibility;
 };
 
-// ── Seeding ─────────────────────────────────────────────────────────────────
-// The starter gallery and its demo activity live in lib/seed-data.ts. See that
-// file for how to re-attribute or switch it off.
+// ── Seed image URLs ─────────────────────────────────────────────────────────
 
 /**
  * Which seed images are genuinely on Cloudinary right now.
@@ -51,28 +65,21 @@ const uploadedPublicIds = new Set<string>(
   cloudName && SEED_MANIFEST.cloudName === cloudName ? SEED_MANIFEST.publicIds : [],
 );
 
-/** Exported so scripts/seed-mongo.ts stores the exact same link the app renders. */
+/** Exported so scripts/seed-mongo.mts stores the exact same link the app renders. */
 export const seedImageUrl = (seed: SeedPin): string =>
   uploadedPublicIds.has(seed.publicId)
     ? `https://res.cloudinary.com/${cloudName}/image/upload/${seed.publicId}`
     : seed.fallbackUrl;
 
-const pins: Pin[] = SEED_PINS.map((seed) => {
-  const onCloudinary = uploadedPublicIds.has(seed.publicId);
-
-  return {
-    id: seed.id,
-    title: seed.title,
-    description: seed.description,
-    imageUrl: seedImageUrl(seed),
-    author: SEED_AUTHOR.name,
-    authorId: SEED_AUTHOR.id,
-    createdAt: daysAgo(seed.daysAgo),
-    publicId: onCloudinary ? seed.publicId : undefined,
-    width: seed.width,
-    height: seed.height,
-  };
-});
+// ── Favourites ──────────────────────────────────────────────────────────────
+// Each of these takes a userId, because a favourite only exists in the context
+// of a signed-in user. Callers must have checked the session first — the server
+// actions and the API routes both do.
+//
+// Only pin IDS are stored. To turn them into pins, hand them to
+// `getPinsByIds(ids, viewerId)` in lib/db/pins.ts — which is also what keeps a
+// stale favourite (a pin since deleted, or one you saved before its author made
+// it private) from showing up: it simply isn't in the result.
 
 // userId (email) -> the set of pin ids that user saved.
 const favorites = new Map<string, Set<string>>();
@@ -83,61 +90,12 @@ if (DEMO_ACTIVITY_ENABLED) {
   }
 }
 
-// Newest first.
-export function getPins(): Pin[] {
-  return [...pins].sort((a, b) => b.createdAt - a.createdAt);
-}
-
-export function getPin(id: string): Pin | undefined {
-  return pins.find((p) => p.id === id);
-}
-
-export function getPinsByAuthor(authorId: string): Pin[] {
-  return getPins().filter((p) => p.authorId === authorId);
-}
-
-export function addPin(input: {
-  title: string;
-  description?: string;
-  imageUrl: string;
-  author: string;
-  authorId: string;
-  publicId?: string;
-  width?: number;
-  height?: number;
-}): Pin {
-  const pin: Pin = {
-    id: String(pins.length + 1) + "-" + Math.round(Math.random() * 1e6),
-    title: input.title,
-    description: input.description,
-    imageUrl: input.imageUrl,
-    author: input.author,
-    authorId: input.authorId,
-    publicId: input.publicId,
-    width: input.width,
-    height: input.height,
-    createdAt: Date.now(),
-  };
-  pins.push(pin);
-  return pin;
-}
-
-// ── Favourites ──────────────────────────────────────────────────────────────
-// Each of these takes a userId, because a favourite only exists in the context
-// of a signed-in user. Callers must have checked the session first — the server
-// actions and the API route both do.
-
 export function getFavoriteIds(userId: string): Set<string> {
   return favorites.get(userId) ?? new Set<string>();
 }
 
 export function isFavorite(userId: string, pinId: string): boolean {
   return getFavoriteIds(userId).has(pinId);
-}
-
-export function getFavoritePins(userId: string): Pin[] {
-  const ids = getFavoriteIds(userId);
-  return getPins().filter((p) => ids.has(p.id));
 }
 
 /**

@@ -5,9 +5,13 @@
 // instead of saving it. Proxying through our own origin and setting
 // Content-Disposition: attachment is what actually makes it a download.
 //
-// PUBLIC, like viewing: if you can see the pin, you can save it.
+// PUBLIC, like viewing — and that "like viewing" is doing real work now that pins
+// can be private: the lookup is viewer-aware, so a private pin is downloadable by
+// its author and 404s for everyone else. A route that fetched by id without the
+// session would be a way to read a private pin's bytes without its page.
 
-import { getPin } from "@/lib/pins";
+import { getPinById } from "@/lib/db/pins";
+import { currentUser } from "@/lib/session";
 
 /** "Misty mountains" -> "misty-mountains" */
 function slugify(title: string): string {
@@ -31,7 +35,9 @@ const EXTENSION_BY_TYPE: Record<string, string> = {
 export async function GET(_request: Request, ctx: RouteContext<"/api/pins/[id]/download">) {
   const { id } = await ctx.params;
 
-  const pin = getPin(id);
+  const user = await currentUser();
+
+  const pin = await getPinById(id, user?.id);
   if (!pin) return Response.json({ error: "No such pin." }, { status: 404 });
 
   // We only ever fetch a URL that was validated as http(s) when the pin was

@@ -9,7 +9,8 @@
 // the session.
 
 import { subscribe, type Comment } from "@/lib/comments";
-import { getPin } from "@/lib/pins";
+import { getPinById } from "@/lib/db/pins";
+import { currentUser } from "@/lib/session";
 
 // Never cache or pre-render a stream.
 export const dynamic = "force-dynamic";
@@ -23,7 +24,10 @@ function sse(event: string, data: unknown): Uint8Array {
 export async function GET(request: Request, ctx: RouteContext<"/api/pins/[id]/comments/stream">) {
   const { id } = await ctx.params;
 
-  if (!getPin(id)) {
+  // Checked once, when the stream opens — a subscription to a private pin's
+  // thread would otherwise keep pushing comments to anyone who guessed the id.
+  const user = await currentUser();
+  if (!(await getPinById(id, user?.id))) {
     return Response.json({ error: "No such pin." }, { status: 404 });
   }
 

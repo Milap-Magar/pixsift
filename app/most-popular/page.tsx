@@ -13,6 +13,7 @@ import { Flame, Heart, MessageCircle } from "lucide-react";
 import PinGrid from "@/app/components/pin-grid";
 import SiteHeader from "@/app/components/site-header";
 import { buttonVariants } from "@/components/ui/button";
+import { listAllPins } from "@/lib/db/pins";
 import { getFavoriteIds } from "@/lib/pins";
 import {
   COMMENT_WEIGHT,
@@ -41,7 +42,10 @@ export default async function MostPopularPage({
   const user = await currentUser();
   const favoriteIds = user ? [...getFavoriteIds(user.id)] : [];
 
-  const ranked = rankByPopularity(activeWindow);
+  // The leaderboard re-sorts by score, so it needs the candidates up front rather
+  // than a page of them. Signed in, your own private pins are ranked too — they
+  // just aren't on anyone else's board.
+  const ranked = rankByPopularity(await listAllPins({ viewerId: user?.id }), activeWindow);
   const engaged = ranked.filter((entry) => entry.score > 0);
 
   const captions = Object.fromEntries(

@@ -4,13 +4,19 @@
 import { type NextRequest } from "next/server";
 
 import { addComment, getComments, MAX_COMMENT_LENGTH } from "@/lib/comments";
-import { getPin } from "@/lib/pins";
+import { getPinById } from "@/lib/db/pins";
 import { currentUser } from "@/lib/session";
 
-// GET /api/pins/:id/comments — PUBLIC.
+// GET /api/pins/:id/comments — PUBLIC for a public pin. A private pin's thread is
+// its author's alone: same 404 the pin itself gives, so this route can't be used
+// to read discussion about something you can't see.
 export async function GET(_request: NextRequest, ctx: RouteContext<"/api/pins/[id]/comments">) {
   const { id } = await ctx.params;
-  if (!getPin(id)) return Response.json({ error: "No such pin." }, { status: 404 });
+
+  const user = await currentUser();
+  if (!(await getPinById(id, user?.id))) {
+    return Response.json({ error: "No such pin." }, { status: 404 });
+  }
 
   return Response.json({ comments: getComments(id) });
 }
@@ -23,7 +29,9 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/pins/[i
   }
 
   const { id } = await ctx.params;
-  if (!getPin(id)) return Response.json({ error: "No such pin." }, { status: 404 });
+  if (!(await getPinById(id, user.id))) {
+    return Response.json({ error: "No such pin." }, { status: 404 });
+  }
 
   let payload: { body?: string };
   try {

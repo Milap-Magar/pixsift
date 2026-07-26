@@ -10,7 +10,7 @@
 // page follows.
 
 import { countComments } from "./comments";
-import { getFavoriteCount, getPins, type Pin } from "./pins";
+import { getFavoriteCount, type Pin } from "./pins";
 
 export const SAVE_WEIGHT = 3;
 export const COMMENT_WEIGHT = 1;
@@ -40,19 +40,25 @@ export type RankedPin = {
 /**
  * Every pin in the window, best first.
  *
+ * `pins` is a parameter rather than something this function fetches, for the same
+ * reason `now` is: it keeps the ranking a pure function you can call with a
+ * literal array in a test. The page does the (async) reading and hands the result
+ * in — see app/most-popular/page.tsx.
+ *
  * NOTE ON THE WINDOW: it filters on when a pin was *posted*, not when each save
  * happened, because the favourites store keeps no timestamps. A true "most saved
  * this week" needs `{ userId, pinId, savedAt }` rows first. The page says so
  * out loud rather than quietly implying otherwise.
  */
 export function rankByPopularity(
+  pins: Pin[],
   window: PopularityWindow = "all",
   now: number = Date.now(),
 ): RankedPin[] {
   const days = POPULARITY_WINDOWS.find((w) => w.key === window)?.days ?? Infinity;
   const cutoff = days === Infinity ? -Infinity : now - days * DAY;
 
-  return getPins()
+  return pins
     .filter((pin) => pin.createdAt >= cutoff)
     .map((pin) => {
       const saves = getFavoriteCount(pin.id);

@@ -5,6 +5,7 @@
 // navigate away the moment you tried to save.
 
 import Link from "next/link";
+import { Lock } from "lucide-react";
 
 import { cdnImage } from "@/lib/cloudinary-url";
 import type { Pin } from "@/lib/pins";
@@ -48,6 +49,16 @@ export default function PinCard({ pin, favorited, signedIn, caption }: PinCardPr
         loading="lazy"
         decoding="async"
       />
+
+      {/* A private pin only ever reaches a grid its own author is looking at —
+          the query wouldn't have returned it otherwise — so this badge is a
+          reminder of a state you chose, not a warning about a leak. */}
+      {pin.visibility === "private" && (
+        <span className="absolute top-3 left-3 z-10 flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur">
+          <Lock className="size-3" />
+          Private
+        </span>
+      )}
 
       <figcaption className="p-3">
         {/* Stretched link: the ::after pseudo-element covers the whole figure,

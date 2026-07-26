@@ -10,10 +10,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { DEFAULT_VISIBILITY, VISIBILITIES, type Visibility } from "@/lib/visibility";
+
 export default function AddPinForm() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [visibility, setVisibility] = useState<Visibility>(DEFAULT_VISIBILITY);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -25,7 +28,7 @@ export default function AddPinForm() {
     const res = await fetch("/api/pins", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, imageUrl }),
+      body: JSON.stringify({ title, imageUrl, visibility }),
     });
 
     setSubmitting(false);
@@ -68,6 +71,24 @@ export default function AddPinForm() {
           placeholder="https://picsum.photos/seed/anything/500/700"
           className="rounded-lg border border-black/15 bg-transparent px-3 py-2 dark:border-white/20"
         />
+      </label>
+
+      <label className="flex flex-col gap-1">
+        <span className="text-sm font-medium">Who can see it</span>
+        {/* A plain <select>: same value the API expects, no extra components.
+            The server calls parseVisibility() on it either way — anything it
+            doesn't recognise becomes "public". */}
+        <select
+          value={visibility}
+          onChange={(e) => setVisibility(e.target.value as Visibility)}
+          className="rounded-lg border border-black/15 bg-transparent px-3 py-2 dark:border-white/20"
+        >
+          {VISIBILITIES.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label} — {option.hint}
+            </option>
+          ))}
+        </select>
       </label>
 
       {imageUrl && (

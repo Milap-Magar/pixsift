@@ -8,18 +8,25 @@
 
 import { type NextRequest } from "next/server";
 
-import { getFavoriteIds, getFavoritePins, getPin, toggleFavorite } from "@/lib/pins";
+import { getPinById, getPinsByIds } from "@/lib/db/pins";
+import { getFavoriteIds, toggleFavorite } from "@/lib/pins";
 import { currentUser } from "@/lib/session";
 
 const unauthorized = () =>
   Response.json({ error: "You must be signed in to manage favourites." }, { status: 401 });
 
 // GET /api/favorites — the caller's own saved pins.
+//
+// The favourites store keeps ids; MongoDB turns them into pins. Anything the
+// caller may no longer see — deleted, or made private by its author since they
+// saved it — simply isn't in the result, because `getPinsByIds` applies the same
+// visibility rule as every other read.
 export async function GET() {
   const user = await currentUser();
   if (!user) return unauthorized();
 
-  return Response.json({ pins: getFavoritePins(user.id) });
+  const pins = await getPinsByIds([...getFavoriteIds(user.id)], user.id);
+  return Response.json({ pins }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 // POST /api/favorites — toggle one pin. Body: { "pinId": "..." }
@@ -36,7 +43,12 @@ export async function POST(request: NextRequest) {
 
   const pinId = body.pinId?.trim();
   if (!pinId) return Response.json({ error: "'pinId' is required." }, { status: 400 });
-  if (!getPin(pinId)) return Response.json({ error: "No such pin." }, { status: 404 });
+  // Someone else's private pin reads as "no such pin" here, exactly as it does
+  // everywhere else — otherwise this endpoint would answer "does pin X exist?"
+  // for pins the caller can't see.
+  if (!(await getPinById(pinId, user.id))) {
+    return Response.json({ error: "No such pin." }, { status: 404 });
+  }
 
   const { favorited } = toggleFavorite(user.id, pinId);
 

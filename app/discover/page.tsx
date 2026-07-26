@@ -13,7 +13,8 @@ import { Search, Sparkles, X } from "lucide-react";
 import PinGrid from "@/app/components/pin-grid";
 import SiteHeader from "@/app/components/site-header";
 import { buttonVariants } from "@/components/ui/button";
-import { getFavoriteIds, getPins, type Pin } from "@/lib/pins";
+import { listAllPins } from "@/lib/db/pins";
+import { getFavoriteIds, type Pin } from "@/lib/pins";
 import { documentText, tokenize } from "@/lib/recommend/text";
 import { currentUser } from "@/lib/session";
 import { cn } from "@/lib/utils";
@@ -81,7 +82,11 @@ export default async function DiscoverPage({
   const user = await currentUser();
   const favoriteIds = user ? [...getFavoriteIds(user.id)] : [];
 
-  const allPins = getPins();
+  // Topic extraction needs document frequencies across the whole catalogue, not
+  // one page of it — hence `listAllPins` rather than `listPins`. It's capped
+  // (MAX_SCAN in lib/db/pins.ts); past that the chips would need a precomputed
+  // term table instead of counting on every request.
+  const allPins = await listAllPins({ viewerId: user?.id });
   const topics = extractTopics(allPins);
   const pins = query ? allPins.filter((pin) => matches(pin, query)) : allPins;
 
