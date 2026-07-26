@@ -31,12 +31,12 @@ Real defects in the code today, not hypotheticals. Roughly worst first.
       mismatch`. Zero images uploaded. Run `bun run cloudinary:check`, fix the
       value, then `bun run seed`. Until then the whole upload path is untested
       against a real account
-- [ ] **The API docs are stale** — **S**
+- [X] **The API docs are stale** — **S**
       `lib/openapi.ts` documents `/api/health`, `/api/hello/{name}`,
       `/api/pins`, `/api/auth/session`. It's missing `/api/favorites`,
       `/api/pins/{id}/comments`, `/api/pins/{id}/comments/stream`, and
       `/api/pins/{id}/download`. `/docs` therefore lies about the API
-- [ ] **`/api/hello/[name]` is tutorial scaffolding** — **S**
+- [X] **`/api/hello/[name]` is tutorial scaffolding** — **S**
       Delete it, or keep it and expect to be asked what it's for
 - [ ] **`/add` duplicates the add-pin dialog, badly** — **S**
       `app/add/add-pin-form.tsx` only sends `{ title, imageUrl }` — no file

@@ -47,7 +47,7 @@ export default function CommentThread({
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const listEndRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
   // Subscribing to an external system is exactly what an effect is for.
   useEffect(() => {
@@ -88,7 +88,10 @@ export default function CommentThread({
           current.some((c) => c.id === posted.id) ? current : [...current, posted],
         );
         setDraft("");
-        listEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        // Scroll the list itself rather than a sentinel element. A <div> inside
+        // a <ul> is invalid — the parser can move it, which desyncs hydration.
+        const list = listRef.current;
+        if (list) list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
       }
     });
   }
@@ -117,7 +120,7 @@ export default function CommentThread({
       {comments.length === 0 ? (
         <p className="text-sm text-muted-foreground">No comments yet. Start the conversation.</p>
       ) : (
-        <ul className="flex max-h-96 flex-col gap-4 overflow-y-auto pr-1">
+        <ul ref={listRef} className="flex max-h-96 flex-col gap-4 overflow-y-auto pr-1">
           {comments.map((comment) => (
             <li key={comment.id} className="flex gap-3">
               {comment.authorImage ? (
@@ -155,7 +158,6 @@ export default function CommentThread({
               </div>
             </li>
           ))}
-          <div ref={listEndRef} />
         </ul>
       )}
 

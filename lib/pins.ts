@@ -51,7 +51,8 @@ const uploadedPublicIds = new Set<string>(
   cloudName && SEED_MANIFEST.cloudName === cloudName ? SEED_MANIFEST.publicIds : [],
 );
 
-const seedImageUrl = (seed: SeedPin): string =>
+/** Exported so scripts/seed-mongo.ts stores the exact same link the app renders. */
+export const seedImageUrl = (seed: SeedPin): string =>
   uploadedPublicIds.has(seed.publicId)
     ? `https://res.cloudinary.com/${cloudName}/image/upload/${seed.publicId}`
     : seed.fallbackUrl;

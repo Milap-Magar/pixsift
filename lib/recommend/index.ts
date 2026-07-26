@@ -27,6 +27,9 @@ import { hybrid } from "./hybrid";
 import type { Recommender, ScoredPin } from "./types";
 
 export type { Recommender, ScoredPin, RecommendationInput } from "./types";
+// Not a `Recommender`, and deliberately outside STRATEGIES: it ranks live
+// Pixabay results rather than our own pins, and it does I/O. /photo/[id] uses it.
+export { similarImages, rankSimilar, buildQueries, type ScoredImage } from "./similar-images";
 export { contentBased } from "./content-based";
 export { collaborative } from "./collaborative";
 export { hybrid, makeHybrid, DEFAULT_WEIGHTS } from "./hybrid";

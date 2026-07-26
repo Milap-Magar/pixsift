@@ -24,6 +24,8 @@ import UserAvatar from "./user-avatar";
 const navLinks = [
   { id: 1, name: "Discover", link: "/discover" },
   { id: 2, name: "Most Popular", link: "/most-popular" },
+  // Searches Pixabay, not the site — that's where new images come from.
+  { id: 3, name: "Find photos", link: "/search" },
 ];
 
 export default async function SiteHeader() {
@@ -32,7 +34,9 @@ export default async function SiteHeader() {
   const uploadEnabled = isCloudinaryConfigured();
 
   return (
-    <header className="sticky top-0 z-10 bg-transparent backdrop-blur dark:border-white/10 dark:bg-black/70">
+    // z-40 leaves deliberate headroom: above all page content, still below the
+    // dialogs (z-50) that must cover the header when open.
+    <header className="sticky top-0 z-40 bg-transparent backdrop-blur dark:border-white/10 dark:bg-black/70">
       {/* Same max-w-page wrapper as every <main>, so the logo lines up with the
           grid below it on ultrawide screens instead of drifting to the edge. */}
       <div className="mx-auto flex w-full max-w-page items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
