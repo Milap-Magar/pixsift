@@ -15,7 +15,22 @@ export const SEED_MANIFEST: {
   /** ISO timestamp of the last successful seed, for your own reference. */
   seededAt: string | null;
 } = {
-  cloudName: null,
-  publicIds: [],
-  seededAt: null,
+  cloudName: "h8wtkcqh",
+  publicIds: [
+      "pixsift/seed/misty-mountains",
+      "pixsift/seed/city-at-night",
+      "pixsift/seed/forest-path",
+      "pixsift/seed/ocean-waves",
+      "pixsift/seed/desert-dunes",
+      "pixsift/seed/autumn-leaves",
+      "pixsift/seed/snowy-cabin",
+      "pixsift/seed/wildflowers",
+      "pixsift/seed/fog-over-the-lake",
+      "pixsift/seed/ridge-line-at-dusk",
+      "pixsift/seed/rain-on-glass",
+      "pixsift/seed/old-stone-bridge",
+      "pixsift/seed/first-snow",
+      "pixsift/seed/harbour-lights"
+  ],
+  seededAt: "2026-07-26T01:34:10.307Z",
 };

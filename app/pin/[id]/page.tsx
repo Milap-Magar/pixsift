@@ -73,8 +73,7 @@ export default async function PinDetailsPage({
           href="/"
           className="mb-4 inline-flex items-center gap-1.5 text-sm text-zinc-500 transition hover:text-foreground"
         >
-          <ArrowLeft className="size-4" />
-          Back to the grid
+          <ArrowLeft className="size-6" />
         </Link>
 
         <article className="grid gap-6 overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-black/5 md:grid-cols-2 dark:bg-zinc-900 dark:ring-white/10">
