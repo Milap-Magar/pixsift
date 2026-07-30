@@ -19,7 +19,7 @@ import { seedImageUrl } from "../lib/pins";
 import { PINS_COLLECTION, ensureIndexes, pinsCollection, type PinDoc } from "../lib/db/pins";
 // Named import, not the default one: the default survives Next's bundler fine,
 // but under tsx's ESM/CJS interop it arrives wrapped and `.close()` goes missing.
-import { clientPromise, DB_NAME } from "../lib/mongodb";
+import { getClient, DB_NAME } from "../lib/mongodb";
 
 const force = process.argv.includes("--force");
 const drop = process.argv.includes("--drop");
@@ -28,7 +28,7 @@ const started = Date.now();
 
 try {
   if (drop) {
-    const client = await clientPromise;
+    const client = await getClient();
     await client.db(DB_NAME).collection(PINS_COLLECTION).drop().catch(() => {
       // 26 = NamespaceNotFound — nothing to drop, which is fine.
     });
@@ -102,7 +102,7 @@ try {
 
   process.exitCode = 1;
 } finally {
-  await (await clientPromise).close();
+  await (await getClient()).close();
 }
 
 // ── Why Node and not Bun? ───────────────────────────────────────────────────

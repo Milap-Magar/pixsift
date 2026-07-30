@@ -45,7 +45,12 @@ export default async function MostPopularPage({
   // The leaderboard re-sorts by score, so it needs the candidates up front rather
   // than a page of them. Signed in, your own private pins are ranked too — they
   // just aren't on anyone else's board.
-  const ranked = rankByPopularity(await listAllPins({ viewerId: user?.id }), activeWindow);
+  // Public leaderboard: an unreachable database degrades to the empty board
+  // rather than a 500. See the same note on /discover.
+  const ranked = rankByPopularity(
+    await listAllPins({ viewerId: user?.id }).catch(() => []),
+    activeWindow,
+  );
   const engaged = ranked.filter((entry) => entry.score > 0);
 
   const captions = Object.fromEntries(

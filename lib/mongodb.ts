@@ -11,9 +11,6 @@
 
 import { MongoClient, type Db, type MongoClientOptions } from "mongodb";
 
-const uri = process.env.MONGODB_CONNECT_URL;
-if (!uri) throw new Error("❌ ❌ ERROR AHEAD : Please add your Mongo URI to .env ❌ ❌");
-
 /** The connection string has no database in its path, so we name it here. */
 export const DB_NAME = process.env.MONGODB_DB ?? "pixsift";
 
@@ -40,15 +37,40 @@ declare global {
   var _mongoClientPromise: Promise<MongoClient> | undefined;
 }
 
-export const clientPromise: Promise<MongoClient> =
-  globalThis._mongoClientPromise ?? new MongoClient(uri, options).connect();
+/**
+ * The shared client, created on first use.
+ *
+ * Connecting lazily (rather than at module scope) is what keeps a missing or
+ * unreachable database from breaking `next build`. Turbopack imports every
+ * route module while collecting page data, so a module-level throw — or a
+ * module-level `.connect()` whose rejection nobody is awaiting yet — takes the
+ * whole build down before a single page renders. Deferring both to the first
+ * real query means a misconfigured deploy surfaces as a failing request we can
+ * report, not a red build.
+ */
+export function getClient(): Promise<MongoClient> {
+  const uri = process.env.MONGODB_CONNECT_URL;
+  if (!uri) {
+    throw new Error(
+      "MONGODB_CONNECT_URL is not set — add it to .env locally, or to the " +
+        "project's Environment Variables on your host, then redeploy.",
+    );
+  }
 
-globalThis._mongoClientPromise = clientPromise;
+  // A rejected connect must not be cached, or one blip would poison the
+  // process forever; clear the slot so the next caller retries.
+  globalThis._mongoClientPromise ??= new MongoClient(uri, options)
+    .connect()
+    .catch((error: unknown) => {
+      globalThis._mongoClientPromise = undefined;
+      throw error;
+    });
+
+  return globalThis._mongoClientPromise;
+}
 
 /** The database every collection helper in lib/db/ goes through. */
 export async function getDb(): Promise<Db> {
-  const client = await clientPromise;
+  const client = await getClient();
   return client.db(DB_NAME);
 }
-
-export default clientPromise;

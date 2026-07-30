@@ -8,7 +8,7 @@
 // this is the first thing to run.
 
 import { PINS_COLLECTION, listPins, pinsCollection } from "../lib/db/pins";
-import { clientPromise, DB_NAME } from "../lib/mongodb";
+import { getClient, DB_NAME } from "../lib/mongodb";
 
 /** The two things that make a query slow: reading everything, or sorting in RAM. */
 type Explained = {
@@ -126,5 +126,5 @@ try {
   console.error(`✗ ${(error as Error).message}`);
   process.exitCode = 1;
 } finally {
-  await (await clientPromise).close();
+  await (await getClient()).close();
 }

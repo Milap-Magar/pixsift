@@ -100,7 +100,19 @@ export async function getFeedPage(
   const position = decode(cursor);
 
   if (position.phase === "db") {
-    const page = await listPins({ limit, cursor: position.cursor });
+    let page: Awaited<ReturnType<typeof listPins>>;
+
+    try {
+      page = await listPins({ limit, cursor: position.cursor });
+    } catch {
+      // The database is unreachable — a paused cluster, a firewall, a bad URI.
+      // The saved gallery is only the OPENING of the feed, so losing it doesn't
+      // have to lose the page: fall through to Pixabay and the wall still fills.
+      // Same bargain as the Pixabay `catch` below — a public, read-only feed
+      // degrades quietly rather than 500-ing a page someone is just browsing.
+      const pixabay = startOfPixabay();
+      return pixabay ? getFeedPage(pixabay, limit) : { items: [], nextCursor: null };
+    }
 
     return {
       items: page.pins.map((pin) => ({ kind: "pin", id: `pin:${pin.id}`, pin })),

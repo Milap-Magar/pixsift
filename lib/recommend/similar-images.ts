@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════════════════
-//  ALGORITHM 4 — "MORE LIKE THIS" FOR *BORROWED* IMAGES  (/photo/[id])
+//  ALGORITHM 3 — "MORE LIKE THIS" FOR *BORROWED* IMAGES  (/photo/[id])
 // ══════════════════════════════════════════════════════════════════════════
 //
 //  The other three recommenders in this folder rank pins we already hold: the

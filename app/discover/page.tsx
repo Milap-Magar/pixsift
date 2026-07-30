@@ -86,7 +86,11 @@ export default async function DiscoverPage({
   // one page of it — hence `listAllPins` rather than `listPins`. It's capped
   // (MAX_SCAN in lib/db/pins.ts); past that the chips would need a precomputed
   // term table instead of counting on every request.
-  const allPins = await listAllPins({ viewerId: user?.id });
+  // A public page shouldn't hand a visitor an error screen because the cluster
+  // is unreachable — the grid's own empty state says far more. Note the
+  // signed-in pages (/dashboard, /profile) deliberately DON'T do this: there,
+  // quietly showing "no pins" would read as data loss rather than an outage.
+  const allPins = await listAllPins({ viewerId: user?.id }).catch(() => []);
   const topics = extractTopics(allPins);
   const pins = query ? allPins.filter((pin) => matches(pin, query)) : allPins;
 
