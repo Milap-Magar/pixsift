@@ -32,6 +32,7 @@
 
 import type { Collection, Db, Filter, IndexDescription } from "mongodb";
 
+import { colorFamily, type ColorFamily, type Swatch } from "@/lib/algorithms/color";
 import { getDb } from "@/lib/mongodb";
 import type { Pin } from "@/lib/pins";
 import { DEFAULT_VISIBILITY, type Visibility } from "@/lib/visibility";
@@ -83,6 +84,45 @@ export type PinDoc = {
    * (mountains, city, water…) can be built from.
    */
   tags?: string[];
+
+  // ── Algorithm output (lib/algorithms/) ────────────────────────────────────
+  // All three fields are OPTIONAL and written after the pin exists. Analysis is
+  // best-effort by design: a photo whose colours could not be clustered is
+  // still a photo, and refusing the post would punish the user for a failure
+  // they cannot see. `scripts/analyze-pins.mts` fills in whatever is missing.
+
+  /**
+   * 64-bit perceptual hash, 16 hex characters. Algorithms 1 and 2.
+   *
+   * Stored as a plain string rather than BSON binary so it is greppable in the
+   * shell, readable in Compass, and directly comparable with the values printed
+   * in the report — the hash is a thing the project is meant to SHOW, not just
+   * use.
+   */
+  phash?: string;
+
+  /** Dominant colours, most-dominant first. Algorithm 3's output. */
+  palette?: Swatch[];
+
+  /**
+   * The colour families present in `palette`, deduplicated.
+   *
+   * Redundant — it is derivable from `palette` — and stored anyway, because
+   * derivable is not the same as indexable. Filtering "every pin with green in
+   * it" against this multikey array is an index seek; computing `colorFamily()`
+   * over every stored swatch at query time is a collection scan. The redundancy
+   * is contained by writing both in one place (`setPinAnalysis`), so they cannot
+   * drift apart.
+   */
+  colorFamilies?: ColorFamily[];
+
+  /**
+   * When the analysis last ran. Distinguishes "not analysed yet" (absent) from
+   * "analysed, and this image genuinely has no palette" (present, with the
+   * fields empty) — which is what stops the backfill script retrying a
+   * permanently-broken image URL on every run.
+   */
+  analyzedAt?: Date;
 };
 
 export async function pinsCollection(): Promise<Collection<PinDoc>> {
@@ -116,6 +156,25 @@ const VALIDATOR = {
       providerPageUrl: { bsonType: "string" },
       credit: { bsonType: "string" },
       tags: { bsonType: "array", items: { bsonType: "string" } },
+      // 16 lowercase hex characters — the shape perceptualHash() emits.
+      phash: { bsonType: "string", pattern: "^[0-9a-f]{16}$" },
+      palette: {
+        bsonType: "array",
+        maxItems: 12,
+        items: {
+          bsonType: "object",
+          required: ["r", "g", "b", "hex", "share"],
+          properties: {
+            r: { bsonType: "number", minimum: 0, maximum: 255 },
+            g: { bsonType: "number", minimum: 0, maximum: 255 },
+            b: { bsonType: "number", minimum: 0, maximum: 255 },
+            hex: { bsonType: "string", pattern: "^#[0-9a-f]{6}$" },
+            share: { bsonType: "number", minimum: 0, maximum: 1 },
+          },
+        },
+      },
+      colorFamilies: { bsonType: "array", items: { bsonType: "string" } },
+      analyzedAt: { bsonType: "date" },
       // "number" covers int/long/double — BSON picks the narrowest type that
       // fits, so pinning this to "int" would reject a perfectly good 800.0.
       width: { bsonType: "number" },
@@ -175,6 +234,29 @@ const INDEXES: IndexDescription[] = [
   // Multikey index over the tag array: "show me more like this" and any
   // tag-based segment become an index lookup rather than a scan.
   { key: { tags: 1, createdAt: -1 }, name: "by_tag_newest" },
+
+  // Every pin that HAS a perceptual hash. Partial rather than sparse so the
+  // index holds only analysed rows — near-duplicate detection loads hashes in
+  // bulk, and there is no reason for that scan to walk past pins with nothing
+  // to compare. It is also what makes "how much of the library is analysed?"
+  // on the dashboard a covered count instead of a collection scan.
+  {
+    key: { phash: 1 },
+    name: "by_phash",
+    partialFilterExpression: { phash: { $exists: true } },
+  },
+
+  // The inverse: rows still waiting for analysis, which is the only query the
+  // backfill script makes.
+  {
+    key: { analyzedAt: 1 },
+    name: "by_analyzed_at",
+    partialFilterExpression: { analyzedAt: { $exists: true } },
+  },
+
+  // Multikey over the derived colour families, so /colors can narrow to
+  // "pins containing green" with a seek before ranking them by ΔE in Node.
+  { key: { colorFamilies: 1, createdAt: -1 }, name: "by_color_family" },
 ];
 
 /**
@@ -287,6 +369,13 @@ const LIST_PROJECTION = {
   credit: 1,
   tags: 1,
   visibility: 1,
+  // Small enough to ride along with every read (five swatches, ~250 bytes) and
+  // needed by the grid to draw a palette-tinted placeholder while the image
+  // loads — so fetching it separately would cost a round trip to save nothing.
+  phash: 1,
+  palette: 1,
+  colorFamilies: 1,
+  analyzedAt: 1,
 } as const;
 
 const DEFAULT_LIMIT = 24;
@@ -314,6 +403,10 @@ export type SavedPin = Pin & {
   credit?: string;
   tags?: string[];
   visibility: Visibility;
+  phash?: string;
+  palette?: Swatch[];
+  colorFamilies?: ColorFamily[];
+  analyzedAt?: number;
 };
 
 /** Back to the plain object the components take (createdAt as a number). */
@@ -340,6 +433,10 @@ export function toPin(doc: PinDoc): SavedPin {
     // how the tile is LABELLED — what you're allowed to read is decided by the
     // query, not by this line.
     visibility: doc.visibility ?? DEFAULT_VISIBILITY,
+    phash: doc.phash,
+    palette: doc.palette,
+    colorFamilies: doc.colorFamilies,
+    analyzedAt: doc.analyzedAt?.getTime(),
   };
 }
 
@@ -471,13 +568,23 @@ export async function getPinsByIds(ids: string[], viewerId?: string): Promise<Sa
  * than a page of it: Discover's topic extraction (it computes document
  * frequencies), the popularity leaderboard (it re-sorts by score), and the
  * recommender's candidate pool.
+ *
+ * `authorId` narrows it to one person's board while keeping the same 500-row
+ * cap — which `listPins` cannot do, since that one is a paged reader capped at
+ * `MAX_LIMIT` (100). It exists for the dashboard's aggregates, which are about
+ * YOUR board and must not read anyone else's rows to compute a number about it.
+ * Scoping in the query rather than filtering afterwards also means the
+ * `by_author_newest` index serves the filter and the sort together.
  */
 export async function listAllPins(
-  opts: { viewerId?: string; limit?: number } = {},
+  opts: { viewerId?: string; authorId?: string; limit?: number } = {},
 ): Promise<SavedPin[]> {
   const pins = await pinsCollection();
   const docs = await pins
-    .find(visibleTo(opts.viewerId), { projection: LIST_PROJECTION })
+    .find(
+      every([visibleTo(opts.viewerId), opts.authorId ? { authorId: opts.authorId } : null]),
+      { projection: LIST_PROJECTION },
+    )
     .sort({ createdAt: -1, _id: -1 })
     .limit(Math.min(Math.max(opts.limit ?? MAX_SCAN, 1), MAX_SCAN))
     .toArray();
@@ -688,4 +795,151 @@ export async function updatePinVisibility(
   );
 
   return doc ? toPin(doc) : null;
+}
+
+// ── Algorithm-backed reads and writes ───────────────────────────────────────
+//
+// The queries that exist because of lib/algorithms/. They keep the same rule as
+// every other read in this file: the visibility filter is part of the query,
+// never a check applied afterwards. That matters more here than elsewhere —
+// near-duplicate detection deliberately looks for images that resemble each
+// other, so a version of it that scanned every row and filtered later would be
+// a way to learn that a private pin exists by uploading something similar and
+// reading the warning.
+
+/**
+ * Store one image's analysis. Called after `analyzeImage()`.
+ *
+ * `colorFamilies` is derived here rather than by the caller, so the array and
+ * the palette it summarises are always written together and cannot drift.
+ *
+ * `analyzedAt` is stamped even when both results are empty. That is the point
+ * of the field: it records that we LOOKED, so the backfill script can tell a
+ * permanently-undecodable image from one it has not reached yet, and stop
+ * retrying the former on every run.
+ */
+export async function setPinAnalysis(
+  id: string,
+  analysis: { phash?: string; palette?: Swatch[] },
+): Promise<void> {
+  const pins = await pinsCollection();
+
+  const families = analysis.palette?.length
+    ? [...new Set(analysis.palette.map((swatch) => colorFamily(swatch)))]
+    : undefined;
+
+  // $set only the fields we actually have. Writing `phash: undefined` would
+  // serialise as null and fail the validator — the same trap `defined()` exists
+  // for on the insert path.
+  const set: Partial<PinDoc> = { analyzedAt: new Date() };
+  if (analysis.phash) set.phash = analysis.phash;
+  if (analysis.palette?.length) set.palette = analysis.palette;
+  if (families?.length) set.colorFamilies = families;
+
+  await pins.updateOne({ _id: id }, { $set: set });
+}
+
+/** Just the ids and hashes — the minimum a Hamming scan needs. */
+export type PinHash = { id: string; phash: string; title: string; imageUrl: string };
+
+/**
+ * Every analysed pin the viewer may see, as `{ id, phash, … }`.
+ *
+ * The candidate set for near-duplicate detection. Projected down to four fields
+ * because the scan is O(N) over the whole set and there is no reason to pull
+ * descriptions and palettes across the wire to compare 64 bits — at 500 rows
+ * that projection is the difference between ~40KB and ~400KB per check, on the
+ * upload path, where the user is waiting.
+ */
+export async function listPinHashes(
+  opts: { viewerId?: string; limit?: number } = {},
+): Promise<PinHash[]> {
+  const pins = await pinsCollection();
+
+  const docs = await pins
+    .find(every([{ phash: { $exists: true } }, visibleTo(opts.viewerId)]), {
+      projection: { phash: 1, title: 1, imageUrl: 1 },
+    })
+    .limit(Math.min(Math.max(opts.limit ?? MAX_SCAN, 1), MAX_SCAN))
+    .toArray();
+
+  return docs
+    .filter((doc): doc is PinDoc & { phash: string } => Boolean(doc.phash))
+    .map((doc) => ({
+      id: doc._id,
+      phash: doc.phash,
+      title: doc.title,
+      imageUrl: doc.imageUrl,
+    }));
+}
+
+/**
+ * How many pins exist, and how many have been analysed.
+ *
+ * Two counts rather than one query returning both, because each is served
+ * entirely from an index (`_id` and `by_phash`) and never touches a document.
+ * An aggregation with a `$group` would have to read every row to do the same
+ * arithmetic.
+ */
+export async function analysisCoverage(
+  viewerId?: string,
+): Promise<{ total: number; analyzed: number }> {
+  const pins = await pinsCollection();
+
+  const [total, analyzed] = await Promise.all([
+    pins.countDocuments(visibleTo(viewerId)),
+    pins.countDocuments(every([{ phash: { $exists: true } }, visibleTo(viewerId)])),
+  ]);
+
+  return { total, analyzed };
+}
+
+/**
+ * Pins that have a palette, for the colour search to rank.
+ *
+ * `families` narrows the candidate set through the multikey index before
+ * anything is scored. That pre-filter is coarse on purpose: it uses the nine
+ * broad buckets from `colorFamily()`, which is cheap and indexable, and then
+ * `rankByColor` does the perceptually-accurate ΔE ranking over whatever
+ * survives. Coarse-then-fine is the same retrieval/ranking split the Pixabay
+ * recommender uses (see lib/recommend/similar-images.ts) — narrow cheaply,
+ * score precisely.
+ */
+export async function listPinsWithPalette(
+  opts: { viewerId?: string; families?: ColorFamily[]; limit?: number } = {},
+): Promise<SavedPin[]> {
+  const pins = await pinsCollection();
+
+  const docs = await pins
+    .find(
+      every([
+        { palette: { $exists: true } },
+        opts.families?.length ? { colorFamilies: { $in: opts.families } } : null,
+        visibleTo(opts.viewerId),
+      ]),
+      { projection: LIST_PROJECTION },
+    )
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(Math.min(Math.max(opts.limit ?? MAX_SCAN, 1), MAX_SCAN))
+    .toArray();
+
+  return docs.map(toPin);
+}
+
+/**
+ * The next batch of pins that still need analysing, oldest first.
+ *
+ * Only used by `scripts/analyze-pins.mts`, so it takes no viewer: a backfill
+ * runs as the database, not as a person, and must reach private pins too.
+ */
+export async function listUnanalysedPins(limit = 25): Promise<SavedPin[]> {
+  const pins = await pinsCollection();
+
+  const docs = await pins
+    .find({ analyzedAt: { $exists: false } }, { projection: LIST_PROJECTION })
+    .sort({ createdAt: 1 })
+    .limit(Math.max(1, limit))
+    .toArray();
+
+  return docs.map(toPin);
 }
