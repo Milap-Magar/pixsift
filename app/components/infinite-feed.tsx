@@ -27,11 +27,18 @@ export default function InfiniteFeed({
   initialCursor,
   favoriteIds,
   signedIn,
+  empty,
 }: {
   initialItems: FeedItem[];
   initialCursor: string | null;
   favoriteIds: string[];
   signedIn: boolean;
+  /**
+   * Shown instead of the wall when the stream has nothing in it — same contract
+   * as <PinGrid>'s `empty`. The landing page is the one grid that could render
+   * against a cold database, and a blank screen there reads as a broken site.
+   */
+  empty?: React.ReactNode;
 }) {
   const { items, loading, error, done, loadMore, sentinel } = useInfiniteList<FeedItem>({
     initialItems,
@@ -42,6 +49,25 @@ export default function InfiniteFeed({
   });
 
   const favorites = new Set(favoriteIds);
+
+  // Nothing at all — not "nothing more". `empty` replaces the wall, but the
+  // status line stays: if the reason we have no items is a failed fetch rather
+  // than an empty database, InfiniteStatus is what offers the retry.
+  if (items.length === 0 && empty) {
+    return (
+      <>
+        {empty}
+        <InfiniteStatus
+          sentinel={sentinel}
+          loading={loading}
+          error={error}
+          done={done}
+          onRetry={() => void loadMore()}
+          doneLabel=""
+        />
+      </>
+    );
+  }
 
   return (
     <>

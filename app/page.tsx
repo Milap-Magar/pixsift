@@ -7,6 +7,9 @@
 // The feed plays saved pins from MongoDB first, then keeps going with live
 // Pixabay photos, all behind one cursor. See lib/feed.ts.
 
+import Link from "next/link";
+import { ImagePlus } from "lucide-react";
+
 import InfiniteFeed from "@/app/components/infinite-feed";
 import SiteHeader from "@/app/components/site-header";
 import { getFeedPage } from "@/lib/feed";
@@ -34,6 +37,26 @@ export default async function Home() {
           initialCursor={nextCursor}
           favoriteIds={favoriteIds}
           signedIn={Boolean(user)}
+          // Every other grid in the app passes one of these; the landing page
+          // was the exception, so a cold database rendered a blank screen —
+          // the worst possible first impression, and indistinguishable from a
+          // page that failed to load. This is also what a visitor sees when
+          // PIXABAY_API_KEY is missing and there are no saved pins to fall
+          // back on, which is the likeliest way to hit it in practice.
+          empty={
+            <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-black/10 py-24 text-center dark:border-white/15">
+              <ImagePlus className="size-7 text-zinc-400" />
+              <p className="font-medium">The wall is empty</p>
+              <p className="max-w-xs text-sm text-zinc-500">
+                Nothing has been posted yet. Add the first photo, or pull one in
+                from{" "}
+                <Link href="/search" className="underline underline-offset-2">
+                  Find photos
+                </Link>
+                .
+              </p>
+            </div>
+          }
         />
       </main>
     </div>

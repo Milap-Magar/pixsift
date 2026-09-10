@@ -2,9 +2,14 @@
 
 // Login as a MODAL instead of a page navigation.
 //
-// The backdrop is the interesting part: rather than a flat grey sheet, it holds
-// the live <PhotoWall /> with a dark scrim on top, so you get dimmed Pinterest
-// style photos drifting behind the card while you sign in.
+// The point of the dialog is that you DON'T lose the grid you were looking at —
+// so the backdrop's job is to dim that grid, not to replace it.
+//
+// It used to render a second wall of twenty picsum.photos images behind the
+// scrim. Twenty network requests, fired on open, to hide the page's own
+// photographs behind a stranger's — and docs/ROADMAP.md rightly called it the
+// heaviest thing on the page. A blur and a scrim over what is already there
+// costs nothing and shows the user their own context.
 //
 // Use it by wrapping whatever should open it:
 //   <LoginDialog className="...">Sign in</LoginDialog>
@@ -24,7 +29,6 @@ import {
 } from "@/components/ui/dialog";
 
 import LoginCard from "./login-card";
-import PhotoWall from "./photo-wall";
 
 type LoginDialogProps = {
   /** Rendered inside the trigger button. */
@@ -45,14 +49,9 @@ export default function LoginDialog({
       <DialogTrigger className={className}>{children}</DialogTrigger>
 
       <DialogPortal>
-        {/* The wrapper's own background is transparent — the photo wall and the
-            scrim below provide the whole look. */}
-        <DialogBackdrop className="overflow-hidden bg-transparent backdrop-blur-none">
-          <PhotoWall className="scale-105 opacity-50 blur-[3px] saturate-125" />
-          {/* The scrim. This is what knocks the background opacity down so the
-              card in front stays perfectly readable. */}
-          <div className="absolute inset-0 bg-black/70" />
-        </DialogBackdrop>
+        {/* Dims and blurs the page behind it, so the card stays readable while
+            the grid you came from is still recognisably there. */}
+        <DialogBackdrop className="bg-black/60 backdrop-blur-sm" />
 
         <DialogPopup className="w-100 gap-0 rounded-3xl border-white/15 bg-background/95 p-8 shadow-black/40 backdrop-blur-xl">
           {/* Base UI asks for Close to live inside Popup on modal dialogs, so
@@ -68,7 +67,9 @@ export default function LoginDialog({
             redirectTo={redirectTo}
             title={<DialogTitle className="text-2xl">Welcome to PixSift</DialogTitle>}
             description={
-              <DialogDescription>Sign in to start pinning what you love.</DialogDescription>
+              <DialogDescription>
+                Sign in to save, post and download.
+              </DialogDescription>
             }
           />
         </DialogPopup>

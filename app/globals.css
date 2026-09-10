@@ -123,27 +123,6 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
-/* Infinite vertical marquee used by the login background photo wall
-   (app/components/photo-wall.tsx). Each column renders its tiles twice, so
-   travelling exactly -50% loops seamlessly. */
-@keyframes pixsift-wall-up {
-  from {
-    transform: translateY(0);
-  }
-  to {
-    transform: translateY(-50%);
-  }
-}
-
-@keyframes pixsift-wall-down {
-  from {
-    transform: translateY(-50%);
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-
 @layer base {
   * {
     @apply border-border outline-ring/50;
