@@ -14,8 +14,10 @@ export const openApiSpec = {
     title: "PixSift API",
     version: "0.1.0",
     description:
-      "Learning API for PixSift. Endpoints are Next.js 16 Route Handlers " +
-      "(app/**/route.ts). Use the 'Try it out' button below to call them live.",
+      "The PixSift HTTP API. Every endpoint is a Next.js 16 Route Handler " +
+      "(app/**/route.ts). Use 'Try it out' to call them live.\n\n" +
+      "Pins carry a 64-bit perceptual hash and a k-means colour palette, " +
+      "computed on upload — see docs/algorithms/.",
   },
   servers: [{ url: "/", description: "This server" }],
   paths: {
@@ -39,85 +41,6 @@ export const openApiSpec = {
               },
             },
           },
-        },
-      },
-    },
-    "/api/hello/{name}": {
-      get: {
-        tags: ["Examples"],
-        summary: "Greet a name",
-        parameters: [
-          {
-            name: "name",
-            in: "path",
-            required: true,
-            description: "Who to greet",
-            schema: { type: "string" },
-            example: "milap",
-          },
-          {
-            name: "loud",
-            in: "query",
-            required: false,
-            description: "If true, SHOUT the greeting",
-            schema: { type: "boolean" },
-          },
-        ],
-        responses: {
-          "200": {
-            description: "The greeting",
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  properties: { message: { type: "string" } },
-                },
-              },
-            },
-          },
-        },
-      },
-      post: {
-        tags: ["Examples"],
-        summary: "Greet a name with a JSON body",
-        parameters: [
-          {
-            name: "name",
-            in: "path",
-            required: true,
-            schema: { type: "string" },
-            example: "milap",
-          },
-        ],
-        requestBody: {
-          required: false,
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                properties: {
-                  excited: {
-                    type: "boolean",
-                    description: "Add exclamation marks",
-                  },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          "201": {
-            description: "Created greeting",
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  properties: { message: { type: "string" } },
-                },
-              },
-            },
-          },
-          "400": { description: "Body was not valid JSON" },
         },
       },
     },
@@ -223,6 +146,198 @@ export const openApiSpec = {
           "400": { description: "Missing title, or imageUrl isn't an http(s) URL" },
           "401": { description: "Not signed in" },
         },
+      },
+    },
+    "/api/pins/{id}/download": {
+      get: {
+        tags: ["Pins", "Downloads"],
+        summary: "Download a pin's image",
+        description:
+          "Streams the image with `Content-Disposition: attachment`, which is " +
+          "what actually makes a browser save it — the HTML `download` " +
+          "attribute is ignored cross-origin. Viewer-aware: a private pin is " +
+          "downloadable by its author and 404s for everyone else.\n\n" +
+          "For Cloudinary-hosted pins the size is applied as an edge " +
+          "transformation, so resizing costs us no image processing. Sizes at " +
+          "or above the original's width are clamped to the original, and the " +
+          "filename reflects what was actually delivered.",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+          {
+            name: "size",
+            in: "query",
+            required: false,
+            schema: {
+              type: "string",
+              enum: ["small", "medium", "large", "original"],
+              default: "original",
+            },
+            description: "small=640px, medium=1280px, large=2048px, original=untouched.",
+          },
+        ],
+        responses: {
+          "200": { description: "The image bytes, as an attachment" },
+          "404": { description: "No such pin, or not yours to see" },
+          "415": { description: "The stored URL isn't an image" },
+          "502": { description: "The image host was unreachable" },
+        },
+      },
+    },
+    "/api/photos/{id}/download": {
+      get: {
+        tags: ["Discover", "Downloads"],
+        summary: "Download a discovered (Pixabay) photo",
+        description:
+          "For images nobody has saved yet, so there is no pin id to ask for.\n\n" +
+          "Takes a Pixabay IMAGE ID and resolves it through their API — " +
+          "deliberately NOT a URL. A route that fetched any URL a caller " +
+          "handed it would be an open proxy, usable to reach addresses only " +
+          "this server can see. The photographer's name is written into the " +
+          "filename so the credit survives leaving the site.",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+            description: "Pixabay image id (digits only).",
+          },
+          {
+            name: "size",
+            in: "query",
+            required: false,
+            schema: {
+              type: "string",
+              enum: ["small", "medium", "large", "original"],
+              default: "original",
+            },
+            description:
+              "Pixabay publishes two fixed renditions, so small/medium map to " +
+              "the ~640px version and large/original to the full-size file.",
+          },
+        ],
+        responses: {
+          "200": { description: "The image bytes, as an attachment" },
+          "404": { description: "No such photo" },
+          "503": { description: "Photo search isn't configured" },
+        },
+      },
+    },
+    "/api/feed": {
+      get: {
+        tags: ["Pins"],
+        summary: "The home feed",
+        description:
+          "Public pins first, then Pixabay results, behind a single opaque " +
+          "cursor — see docs/INFINITE-SCROLL.md.",
+        parameters: [
+          { name: "cursor", in: "query", required: false, schema: { type: "string" } },
+          { name: "limit", in: "query", required: false, schema: { type: "integer", default: 24 } },
+        ],
+        responses: { "200": { description: "One page of feed items" } },
+      },
+    },
+    "/api/search": {
+      get: {
+        tags: ["Discover"],
+        summary: "Search Pixabay",
+        parameters: [
+          { name: "q", in: "query", required: true, schema: { type: "string" } },
+          { name: "page", in: "query", required: false, schema: { type: "integer", default: 1 } },
+        ],
+        responses: {
+          "200": { description: "Search results" },
+          "503": { description: "PIXABAY_API_KEY isn't set" },
+        },
+      },
+    },
+    "/api/favorites": {
+      get: {
+        tags: ["Favourites"],
+        summary: "Your saved pin ids (requires login)",
+        responses: {
+          "200": { description: "The signed-in user's favourite pin ids" },
+          "401": { description: "Not signed in" },
+        },
+      },
+    },
+    "/api/dashboard": {
+      post: {
+        tags: ["Discover"],
+        summary: "Save a discovered image to your board (requires login)",
+        description:
+          "Writes one pin from a Pixabay result. The bytes stay on Pixabay's " +
+          "servers; we store the link and the provenance. The perceptual hash " +
+          "and colour palette are computed AFTER the response is sent.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["title", "imageUrl"],
+                properties: {
+                  title: { type: "string" },
+                  description: { type: "string" },
+                  imageUrl: { type: "string" },
+                  thumbUrl: { type: "string" },
+                  provider: { type: "string", enum: ["pixabay"] },
+                  providerId: { type: "string" },
+                  providerPageUrl: { type: "string" },
+                  credit: { type: "string" },
+                  tags: { type: "array", items: { type: "string" } },
+                  visibility: { type: "string", enum: ["public", "private"] },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Pin created" },
+          "401": { description: "Not signed in" },
+          "409": { description: "You've already saved that image" },
+        },
+      },
+    },
+    "/api/pins/{id}/comments": {
+      get: {
+        tags: ["Comments"],
+        summary: "Comments on a pin",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { "200": { description: "The thread" } },
+      },
+      post: {
+        tags: ["Comments"],
+        summary: "Add a comment (requires login)",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["body"],
+                properties: { body: { type: "string", maxLength: 1000 } },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Comment added" },
+          "401": { description: "Not signed in" },
+        },
+      },
+    },
+    "/api/pins/{id}/comments/stream": {
+      get: {
+        tags: ["Comments"],
+        summary: "Live comment stream (Server-Sent Events)",
+        description:
+          "text/event-stream. New comments are pushed as they arrive. The " +
+          "emitter is in-process, so this only works on a single instance — " +
+          "see docs/ROADMAP.md.",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: { "200": { description: "An open SSE stream" } },
       },
     },
     "/api/auth/session": {

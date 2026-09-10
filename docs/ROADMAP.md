@@ -65,16 +65,22 @@ Real defects in the code today, not hypotheticals. Roughly worst first.
 
 ## 1.3 Missing states and feedback
 
-- [ ] **No `loading.tsx`, `error.tsx`, or `not-found.tsx` anywhere** — **S**
-      A slow page shows nothing; a thrown error shows the raw Next.js overlay;
-      a bad URL gets the default 404. Masonry skeletons and a real 404 page are
-      an afternoon
-- [ ] **The landing page has no empty state.** Every other grid passes an
-      `empty` prop; `/` doesn't. With an empty database it renders a blank
-      screen — **S**
-- [ ] **No layout-shift protection on images.** Cloudinary can produce a tiny
-      blurred placeholder; showing it while the full image loads fixes the
-      reflow your own Gate 4 calls out — **S**
+- [~] **`loading.tsx` / `error.tsx` / `not-found.tsx`** — **S**
+      Done at the root: `app/loading.tsx` is a masonry skeleton on the *same*
+      grid classes as the real wall (so nothing reflows on swap),
+      `app/error.tsx` is the error boundary, `app/not-found.tsx` the real 404.
+      Note `error.tsx` takes **`unstable_retry`**, not `reset` — Next 16 renamed
+      it, and `reset` re-renders with the same failed data instead of
+      re-fetching. Still todo: a `loading.tsx` for `/dashboard`, `/colors`,
+      `/discover` and `/search`
+- [X] **The landing page has no empty state.** `<InfiniteFeed>` now takes the
+      same `empty` prop every other grid takes, and `/` passes one
+- [X] **No layout-shift protection on images.** `<PinCard>` reserves the exact
+      aspect ratio up front and shows a grey placeholder in the reserved box,
+      the same fix `<PixabayResultCard>` already used. Only when the pin
+      actually stores `width`/`height` — an unanalysed pasted link has neither,
+      and guessing a square would *crop* it through `object-cover`. A blurred
+      Cloudinary placeholder on top of this is still available if wanted
 - [ ] **No upload progress.** A 9MB photo on slow wifi shows a spinner with no
       indication of how far along it is — **S**
 - [ ] **No confirmation after acting.** Saving, sharing, and copying give no

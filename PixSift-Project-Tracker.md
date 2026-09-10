@@ -24,7 +24,7 @@ Each phase has tasks and a **Definition of Done (DoD)** gate at the end. A task 
 - [X] MongoDB connection working (Atlas or local), one test document written and read back
 - [X] Cloudinary account configured, one manual test image uploaded and delivered via URL
 - [~] NextAuth wired with at least one provider; can sign in and see a session
-- [ ] Data model drafted: `User`, `Image` (stores Cloudinary URL, pHash value, dominant-color palette, owner, timestamps)
+- [X] Data model drafted: `User`, `Image` (stores Cloudinary URL, pHash value, dominant-color palette, owner, timestamps) — `PinDoc` in `lib/db/pins.ts`; `phash`, `palette`, `colorFamilies`, `analyzedAt` with a JSON-Schema validator and partial indexes
 
 **DoD gate 0:** A logged-in user exists in the DB, and a hard-coded image record can be created and fetched through a route handler. If you can't prove sign-in + one DB round-trip, do not proceed.
 
@@ -32,9 +32,9 @@ Each phase has tasks and a **Definition of Done (DoD)** gate at the end. A task 
 
 ## Phase 1 — Upload pipeline
 
-- [ ] Upload route accepts an image, pushes it to Cloudinary, stores the returned URL in MongoDB
-- [ ] On upload, `sharp` extracts raw pixel data (resized to a fixed small grid, grayscale) — verified by logging the pixel array length
-- [ ] Uploaded image appears in a raw list view (no styling yet, just proof of persistence)
+- [X] Upload route accepts an image, pushes it to Cloudinary, stores the returned URL in MongoDB
+- [X] On upload, `sharp` extracts raw pixel data (resized to a fixed small grid, grayscale) — `lib/algorithms/pixels.ts`; length asserted in code (1024 for 32×32) rather than logged
+- [X] Uploaded image appears in the feed, `/dashboard/pins` and `/profile`
 
 **DoD gate 1:** Upload a real image from the browser → it lands in Cloudinary, its record lands in MongoDB, and you can read back its pixel matrix. The pixel extraction is the input to every algorithm below, so this gate is non-negotiable.
 
@@ -43,32 +43,32 @@ Each phase has tasks and a **Definition of Done (DoD)** gate at the end. A task 
 ## Phase 2 — Algorithmic core (this is the graded project)
 
 ### 2a. Perceptual hash (pHash)
-- [ ] Grayscale + resize to 32×32 using `sharp`
-- [ ] Discrete Cosine Transform implemented by hand (your own code)
-- [ ] Take top-left 8×8 low-frequency block, compute median, produce 64-bit hash
-- [ ] Hash stored on the `Image` record at upload time
+- [X] Grayscale + resize to 32×32 using `sharp` — `grayscaleMatrix()`
+- [X] Discrete Cosine Transform implemented by hand — `lib/algorithms/dct.ts`, separable O(N³). **Verified against a naive O(N⁴) reference: max error 5.5e-12, energy preserved (Parseval), DC = N×mean**
+- [X] Take top-left 8×8 low-frequency block, compute median (excluding DC), produce 64-bit hash — `lib/algorithms/phash.ts`
+- [X] Hash stored on the pin at upload time — before the Cloudinary upload, so a rejected duplicate costs nothing
 
 ### 2b. Hamming distance / near-duplicate detection
-- [ ] Hamming distance function implemented by hand (bit-count of XOR)
-- [ ] On upload, new hash compared against existing hashes; matches under a threshold flagged
-- [ ] Threshold chosen deliberately and written down with a one-line justification
+- [X] Hamming distance implemented by hand (nibble popcount table over XOR) — `lib/algorithms/hamming.ts`
+- [X] On upload, new hash compared against existing hashes; matches flagged in the add dialog with the image, the bit distance, and an "Add anyway"
+- [X] Threshold chosen deliberately from a precision/recall sweep, justified at length in `lib/algorithms/hamming.ts` and `docs/algorithms/02-hamming-distance.md` §3
 
 ### 2c. k-means dominant-color extraction
-- [ ] k-means implemented by hand (init centroids, assign, recompute, iterate to convergence)
-- [ ] Runs on image pixels (RGB space), returns k dominant colors + proportions
-- [ ] Palette stored on the `Image` record
+- [X] k-means implemented by hand with k-means++ init, Lloyd's iteration, seeded PRNG — `lib/algorithms/kmeans.ts`
+- [X] Runs on image pixels (RGB space), returns 5 dominant colours + proportions
+- [X] Palette stored on the pin, plus a derived indexable `colorFamilies` array
 
 **DoD gate 2 (the defense-critical gate):**
-- [ ] Two visually near-identical images (one resized/re-saved copy) are correctly flagged as duplicates; two unrelated images are not.
-- [ ] Dominant-color palette for a test image visibly matches the image by eye.
+- [X] Two visually near-identical images are correctly flagged; unrelated ones are not. **Measured: 196 edited copies vs 2,912 unrelated pairs → precision 1.00, recall 0.91 at threshold 10.** See `docs/algorithms/EVALUATION.md`
+- [X] Palette rendered as a proportional strip on every pin's page, so it can be checked against the photo at a glance. Reproducibility asserted: 14/14 bit-identical across runs
 - [ ] You can open each of the three files and explain every line without reading it off the screen. If you can't narrate the DCT loop from understanding, you are not done — you are exposed.
 
 ---
 
 ## Phase 3 — Search & discovery features
 
-- [ ] Color search: user picks/enters a color → results ranked by distance to stored palettes (reuses your k-means output)
-- [ ] Duplicate view: given an image, show its near-duplicates (reuses Hamming)
+- [X] Colour search at `/colors` — ranked by CIELAB ΔE weighted by each swatch's share, narrowed first through an indexed colour-family filter
+- [X] Near-duplicates section on `/pin/[id]`, plus a full review queue at `/dashboard/duplicates` with a live threshold slider and 8×8 hash diffs
 - [ ] Basic tag or category filter (optional, only if time remains)
 
 **DoD gate 3:** Searching a color returns images whose palettes actually contain that color, ordered sensibly. A reviewer picks a color and agrees the top results match.
@@ -77,9 +77,9 @@ Each phase has tasks and a **Definition of Done (DoD)** gate at the end. A task 
 
 ## Phase 4 — The feed (design-engineer polish)
 
-- [ ] Masonry feed layout, responsive, no layout shift on image load
-- [ ] Image detail view (palette shown, near-duplicates shown)
-- [ ] Loading/skeleton states, empty states, hover interactions
+- [X] Masonry feed layout, responsive, no layout shift on image load — CSS columns, 2→6 columns by breakpoint. **Every tile now reserves its exact aspect ratio before the image loads** (`pin-card.tsx`, matching `pixabay-result-card.tsx`); verified against the running wall: 18/18 tiles emit a reserved ratio, none fall back
+- [X] Image detail view — palette strip, clickable swatches, near-duplicates, and the pin's own hash drawn as an 8×8 grid
+- [~] Loading/skeleton states, empty states, hover interactions — `app/loading.tsx` (masonry skeleton on the same grid as the real wall), `app/error.tsx` (Next 16 `unstable_retry`, not the old `reset`), `app/not-found.tsx`, and the landing page's missing `empty` state are all in. **Still missing: a `loading.tsx` for `/dashboard`, `/colors`, `/discover` and `/search`** — the four other routes that wait on a network call
 - [ ] One deliberate typographic + color-system pass so it reads as intentional, not templated
 
 **DoD gate 4:** A stranger looking at the feed would guess "polished product," not "student assignment." This is your differentiation — but it is worth 0% of the algorithm grade, so it comes *after* gate 2 passes, never before.
@@ -88,11 +88,11 @@ Each phase has tasks and a **Definition of Done (DoD)** gate at the end. A task 
 
 ## Phase 5 — Testing & result analysis (required by the report)
 
-- [ ] Test image set assembled: known duplicates, known non-duplicates, varied colors
-- [ ] Test cases written in a table (input → expected → actual → pass/fail)
-- [ ] Precision & recall computed for the duplicate detector across the test set
-- [ ] Threshold tuned using the precision/recall numbers, decision documented
-- [ ] k-means result quality noted (does palette match perception?)
+- [X] Test set GENERATED rather than hand-labelled: every real photo × 16 fixed edits, so labels are exact and reproducible — `scripts/evaluate-algorithms.mts`
+- [X] Per-edit table (min / median / max distance, caught vs total) in `docs/algorithms/EVALUATION.md` §3
+- [X] Precision & recall computed across thresholds 0–20 — EVALUATION.md §2
+- [X] Threshold tuned and the decision documented, **including why 10 was chosen over the F1 maximum of 18** (margin against the negative distribution's left tail)
+- [X] k-means quality measured: 23.4 mean iterations, ΔE drift 1.2 mean / 5.4 max under a different seed, reproducibility asserted — EVALUATION.md §4
 
 **DoD gate 5:** You have a numbers table, not adjectives. "It works well" fails this gate. "Precision 0.9, recall 0.83 at threshold N" passes it. This section is what separates a CACS452 project from a CRUD app in the examiner's eyes.
 
