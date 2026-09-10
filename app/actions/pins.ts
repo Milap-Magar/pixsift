@@ -13,6 +13,11 @@
 
 import { revalidatePath } from "next/cache";
 
+import {
+  guardAgainstDuplicates,
+  storeAnalysis,
+  type DuplicateWarning,
+} from "@/lib/algorithms/pipeline";
 import { currentUser } from "@/lib/session";
 import { createPin, getPinById, updatePinVisibility } from "@/lib/db/pins";
 import { toggleFavorite } from "@/lib/pins";
@@ -28,6 +33,17 @@ import {
 export type CreatePinState = {
   error?: string;
   createdId?: string;
+  /**
+   * Set when the perceptual hash matched something already in the user's
+   * library. The pin was NOT created — the dialog shows the match and offers
+   * "post anyway", which re-submits with `acknowledgeDuplicate` set.
+   *
+   * A warning rather than a refusal, because the algorithm is a good guess and
+   * not an oracle: two frames from the same burst are genuinely near-identical
+   * and the person may well want both. See docs/algorithms/02-hamming-distance.md
+   * on why the threshold is tuned to be safe to ignore.
+   */
+  duplicate?: DuplicateWarning;
 };
 
 /**
@@ -72,6 +88,10 @@ export async function createPinAction(
   const hasFile = file instanceof File && file.size > 0;
   if (!hasFile && !imageUrl) return { error: "Drop an image, or paste an image URL." };
 
+  // Set by the "Post anyway" button, after the user has seen a duplicate
+  // warning and decided to keep going.
+  const acknowledgedDuplicate = formData.get("acknowledgeDuplicate") === "1";
+
   const common = {
     title,
     description: description || undefined,
@@ -96,6 +116,17 @@ export async function createPinAction(
     if (file.size > MAX_UPLOAD_BYTES) {
       return { error: `That image is too big — the limit is ${MAX_UPLOAD_BYTES / 1024 / 1024}MB.` };
     }
+
+    // ── The algorithms run HERE, before the upload ────────────────────────
+    // We already hold the bytes, so hashing costs one decode and no network.
+    // Doing it first means a duplicate the user decides against costs nothing:
+    // there is no Cloudinary asset to orphan and no row to roll back. Getting
+    // this order wrong is what turns "we warned you" into "we warned you and
+    // uploaded it anyway".
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const { analysis, warning } = await guardAgainstDuplicates(bytes, user.id);
+
+    if (warning && !acknowledgedDuplicate) return { duplicate: warning };
 
     let uploaded;
     try {
@@ -124,6 +155,11 @@ export async function createPinAction(
       return { error: "The image uploaded, but saving the pin failed. Try again." };
     }
 
+    // The hash and palette are already computed — just file them against the
+    // row that now exists. Awaited rather than deferred because it is a single
+    // indexed update with nothing left to compute.
+    await storeAnalysis(created.id, analysis);
+
     revalidatePinSurfaces();
     return { createdId: created.id };
   }
@@ -141,6 +177,15 @@ export async function createPinAction(
     return { error: "Image URL must start with http:// or https://" };
   }
 
+  // Same guard as the upload path, except the bytes have to be fetched. That
+  // costs a round trip to someone else's server on the posting path, which is
+  // the price of checking before writing rather than after. `analyzeImage`
+  // fails soft, so a host that is slow or down leaves `analysis.phash` unset
+  // and the post simply proceeds unchecked.
+  const { analysis, warning } = await guardAgainstDuplicates(parsed.toString(), user.id);
+
+  if (warning && !acknowledgedDuplicate) return { duplicate: warning };
+
   let created;
   try {
     created = await createPin({ ...common, imageUrl: parsed.toString(), source: "link" });
@@ -148,6 +193,8 @@ export async function createPinAction(
     console.error("createPinAction: pin write failed:", error);
     return { error: "Couldn't save that pin. Try again." };
   }
+
+  await storeAnalysis(created.id, analysis);
 
   revalidatePinSurfaces();
   return { createdId: created.id };

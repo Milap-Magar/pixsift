@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
+import DuplicateWarning from "./duplicate-warning";
 import ImageDropzone from "./image-dropzone";
 
 const inputClasses =
@@ -56,6 +57,14 @@ export default function AddPinDialog({
   const [mode, setMode] = useState<Mode>(uploadEnabled ? "upload" : "link");
   const [imageUrl, setImageUrl] = useState("");
   const [visibility, setVisibility] = useState<Visibility>(DEFAULT_VISIBILITY);
+
+  // Set once the user has seen a duplicate warning and pressed "Add anyway".
+  // It rides along in the FormData so the SERVER decides whether to re-check —
+  // the client only reports that a human was shown the match and chose to
+  // continue. Keeping the decision server-side matters because the action is
+  // reachable by direct POST, and this flag is the one thing that can switch
+  // the guard off.
+  const [acknowledged, setAcknowledged] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
   const [state, formAction, pending] = useActionState<CreatePinState, FormData>(
@@ -64,12 +73,20 @@ export default function AddPinDialog({
     // transition, so the reset and the close are part of the same update.
     async (previousState, formData) => {
       const result = await createPinAction(previousState, formData);
+
       if (result.createdId) {
         setImageUrl("");
         setVisibility(DEFAULT_VISIBILITY);
+        setAcknowledged(false);
         formRef.current?.reset();
         setOpen(false);
       }
+
+      // A duplicate came back: the pin was NOT created. Arm the acknowledgement
+      // so the same submit button becomes "Add anyway" — one more press posts
+      // it. Re-checking on that second press would just find the same match.
+      if (result.duplicate) setAcknowledged(true);
+
       return result;
     },
     {},
@@ -218,6 +235,24 @@ export default function AddPinDialog({
               </p>
             </fieldset>
 
+            {/* Carries the "I've seen the warning" decision to the server.
+                Only present once a warning has actually been shown, so a
+                hand-crafted POST that sets it is doing the one thing the flag
+                means: skipping a check on an image nobody has looked at. That
+                costs a redundant pin in that user's own library and nothing
+                else, which is why it's a plain field and not a signed token. */}
+            {acknowledged && <input type="hidden" name="acknowledgeDuplicate" value="1" />}
+
+            {state.duplicate ? (
+              <DuplicateWarning
+                warning={state.duplicate}
+                // "Let me change it instead" — disarm the acknowledgement so
+                // the next submit runs the check again. Without this, editing
+                // the title and re-submitting would post the duplicate silently.
+                onDismiss={() => setAcknowledged(false)}
+              />
+            ) : null}
+
             {state.error ? (
               <p role="alert" className="text-sm text-destructive">
                 {state.error}
@@ -230,6 +265,7 @@ export default function AddPinDialog({
               className={cn(
                 buttonVariants({ variant: "default" }),
                 "h-10 w-full gap-2 rounded-full",
+                acknowledged && "bg-amber-600 hover:bg-amber-700",
               )}
             >
               {pending ? (
@@ -237,7 +273,13 @@ export default function AddPinDialog({
               ) : (
                 <ImagePlus className="size-4" />
               )}
-              {pending ? (mode === "upload" ? "Uploading…" : "Adding…") : "Add pin"}
+              {pending
+                ? mode === "upload"
+                  ? "Checking and uploading…"
+                  : "Checking…"
+                : acknowledged
+                  ? "Add anyway"
+                  : "Add pin"}
             </button>
           </form>
         </DialogPopup>

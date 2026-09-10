@@ -9,6 +9,7 @@
 
 import { type NextRequest } from "next/server";
 
+import { analyzeInBackground } from "@/lib/algorithms/pipeline";
 import { createPin, listPins } from "@/lib/db/pins";
 import { currentUser } from "@/lib/session";
 import { parseVisibility } from "@/lib/visibility";
@@ -78,6 +79,10 @@ export async function POST(request: NextRequest) {
       visibility: parseVisibility(body.visibility),
       source: "link",
     });
+
+    // Same reasoning as /api/dashboard: the image lives on someone else's host,
+    // so the fetch-and-decode happens once the response has been sent.
+    analyzeInBackground(pin.id, pin.imageUrl);
 
     return Response.json({ pin }, { status: 201 });
   } catch (error) {

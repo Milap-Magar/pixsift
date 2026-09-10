@@ -12,6 +12,7 @@
 
 import { type NextRequest } from "next/server";
 
+import { analyzeInBackground } from "@/lib/algorithms/pipeline";
 import { AlreadySavedError, createPin, listPins, searchPins } from "@/lib/db/pins";
 import { currentUser } from "@/lib/session";
 import { parseVisibility } from "@/lib/visibility";
@@ -115,6 +116,13 @@ export async function POST(request: NextRequest) {
       tags: body.tags?.map((tag) => tag.trim().toLowerCase()).filter(Boolean),
       visibility: parseVisibility(body.visibility),
     });
+
+    // Hash and palette are computed AFTER the response goes out. The bytes are
+    // on Pixabay's servers, so analysing inline would put a download and a
+    // decode in front of a click whose only job is "add this to my board" —
+    // seconds of waiting for a result the response does not carry. See
+    // `analyzeInBackground` for why this is `after()` and not a loose promise.
+    analyzeInBackground(pin.id, pin.imageUrl);
 
     return Response.json({ pin }, { status: 201 });
   } catch (error) {
