@@ -23,6 +23,7 @@ import { ArrowLeft, ExternalLink, Share2 } from "lucide-react";
 
 import PinGrid from "@/app/components/pin-grid";
 import PixabayResultCard from "@/app/components/pixabay-result-card";
+import DownloadMenu from "@/app/components/download-menu";
 import SavePixabayButton from "@/app/components/save-pixabay-button";
 import SharePanel from "@/app/components/share-panel";
 import SiteHeader from "@/app/components/site-header";
@@ -135,11 +136,26 @@ export default async function PhotoDetailsPage({
                 className="cursor-pointer"
               />
 
-              {/* Not a download button. Pixabay's licence wants you to go through
-                  their page for the original, and a cross-origin `download`
-                  attribute is ignored by browsers anyway — it would silently
-                  open the image instead of saving it. Save copies it to your
-                  board; this goes to the source. */}
+              {/* This page used to have no download button, on the reasoning
+                  that a cross-origin `download` attribute is ignored by
+                  browsers — true, and the reason /api/photos/[id]/download
+                  exists. It proxies the file through our own origin with a
+                  Content-Disposition header, which is what actually saves it.
+                  The photographer's name is written into the filename, so the
+                  credit survives leaving the site.
+
+                  `resizable={false}`: Pixabay publishes fixed renditions rather
+                  than an on-the-fly resizer, so there are two real sizes here,
+                  not four. The menu says so instead of offering choices that
+                  deliver the same bytes. */}
+              <DownloadMenu
+                href={`/api/photos/${encodeURIComponent(image.providerId)}/download`}
+                resizable={false}
+                className={actionButtonClasses}
+              />
+
+              {/* Attribution isn't required by Pixabay's licence. It's still the
+                  decent thing, and it's the link back a marker will look for. */}
               <a
                 href={image.pageUrl}
                 target="_blank"

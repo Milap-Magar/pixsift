@@ -10,6 +10,7 @@ import { Lock } from "lucide-react";
 import { cdnImage } from "@/lib/cloudinary-url";
 import type { Pin } from "@/lib/pins";
 
+import { DownloadIconButton } from "./download-menu";
 import FavoriteToggle from "./favorite-toggle";
 
 type PinCardProps = {
@@ -26,6 +27,17 @@ const heartButtonClasses =
 
 export default function PinCard({ pin, favorited, signedIn, caption }: PinCardProps) {
   const href = `/pin/${encodeURIComponent(pin.id)}`;
+
+  // Reserve the tile's exact shape before the image loads, so the masonry
+  // doesn't reflow as photos arrive — the layout-shift problem Gate 4 calls
+  // out, and the same fix <PixabayResultCard> already uses.
+  //
+  // Only when we actually KNOW the dimensions, though. `width` and `height` are
+  // optional on a Pin (a pasted link that was never analysed has neither), and
+  // guessing a square would crop those photos through `object-cover` rather
+  // than just failing to reserve space for them. Unknown dimensions keep the
+  // old behaviour: natural height, one reflow.
+  const ratio = pin.width && pin.height ? pin.width / pin.height : undefined;
 
   return (
     // `isolate` is load-bearing, not decoration. Without it this figure is
@@ -45,7 +57,11 @@ export default function PinCard({ pin, favorited, signedIn, caption }: PinCardPr
         alt={pin.title}
         width={pin.width}
         height={pin.height}
-        className="h-auto w-full object-cover transition group-hover:opacity-90"
+        // The grey is the placeholder: the box is already the right size, so
+        // this is what fills it until the pixels land. The image is opaque once
+        // decoded, so it's never visible afterwards.
+        className="h-auto w-full bg-zinc-200 object-cover transition group-hover:opacity-90 dark:bg-zinc-800"
+        style={ratio ? { aspectRatio: ratio } : undefined}
         loading="lazy"
         decoding="async"
       />
@@ -78,8 +94,13 @@ export default function PinCard({ pin, favorited, signedIn, caption }: PinCardPr
         )}
       </figcaption>
 
-      {/* Sits above the stretched link's overlay — that's what the z-10 in
-          heartButtonClasses is for, and why the figure must `isolate`. */}
+      {/* Both sit above the stretched link's overlay — that's what the z-10 in
+          heartButtonClasses is for, and why the figure must `isolate`.
+
+          Download is here rather than only on the detail page because it is the
+          single most common thing a visitor wants from a photo grid, and making
+          them open the pin first is a click charged for nothing. It appears on
+          hover so it doesn't compete with the heart at rest. */}
       <FavoriteToggle
         pinId={pin.id}
         pinTitle={pin.title}
@@ -88,6 +109,16 @@ export default function PinCard({ pin, favorited, signedIn, caption }: PinCardPr
         returnTo={href}
         className={heartButtonClasses}
         showLabel={false}
+      />
+
+      <DownloadIconButton
+        href={`/api/pins/${encodeURIComponent(pin.id)}/download`}
+        title={pin.title}
+        // `focus-within` isn't enough on its own here — the button must also be
+        // reachable by keyboard, and `opacity-0` alone would leave a focusable
+        // control the user cannot see. `group-focus-within` brings it back the
+        // moment anything inside the card takes focus.
+        className="absolute top-3 right-14 z-10 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
       />
     </figure>
   );

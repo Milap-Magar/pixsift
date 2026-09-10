@@ -12,6 +12,7 @@ import Link from "next/link";
 
 import type { PixabayImage } from "@/lib/pixabay";
 
+import { DownloadIconButton } from "./download-menu";
 import SavePixabayButton from "./save-pixabay-button";
 
 export default function PixabayResultCard({
@@ -50,6 +51,15 @@ export default function PixabayResultCard({
       <Link href={href} aria-label={`Open "${image.title}"`} className="absolute inset-0" />
 
       <SavePixabayButton image={image} signedIn={signedIn} variant="icon" />
+
+      {/* Downloading needs no account — the file is Pixabay's to give away, and
+          gating it behind a sign-up would be inventing a wall their licence
+          doesn't ask for. Saving to a board is the thing that needs one. */}
+      <DownloadIconButton
+        href={`/api/photos/${encodeURIComponent(image.providerId)}/download`}
+        title={image.title}
+        className="absolute top-3 right-14 z-20 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+      />
 
       <figcaption className="pointer-events-none absolute inset-x-0 bottom-0 bg-linear-to-t from-black/70 to-transparent p-3 text-white opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
         <p className="truncate text-sm font-medium">{image.title}</p>
