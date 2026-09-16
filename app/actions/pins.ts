@@ -13,6 +13,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { revalidatePinSurfaces } from "@/lib/revalidate";
 import {
   guardAgainstDuplicates,
   storeAnalysis,
@@ -20,6 +21,7 @@ import {
 } from "@/lib/algorithms/pipeline";
 import { currentUser } from "@/lib/session";
 import { createPin, getPinById, updatePinVisibility } from "@/lib/db/pins";
+import { removePin } from "@/lib/delete-pin";
 import { toggleFavorite } from "@/lib/pins";
 import { parseVisibility, type Visibility } from "@/lib/visibility";
 import {
@@ -45,19 +47,6 @@ export type CreatePinState = {
    */
   duplicate?: DuplicateWarning;
 };
-
-/**
- * Every surface that lists pins. Called after any write, so the new pin is
- * already in the grid behind the dialog by the time it closes.
- *
- * `revalidatePath` in a Server Action also re-renders the current route and ships
- * the new RSC payload in the same response — one roundtrip, no follow-up fetch.
- */
-function revalidatePinSurfaces() {
-  for (const path of ["/", "/dashboard", "/profile", "/discover", "/most-popular"]) {
-    revalidatePath(path);
-  }
-}
 
 /**
  * Creates a pin from EITHER a dropped/selected file (uploaded to Cloudinary) or
@@ -200,6 +189,47 @@ export async function createPinAction(
   return { createdId: created.id };
 }
 
+export type DeletePinResult = {
+  /** What was removed. Present only on success. */
+  deleted?: { id: string; title: string; fileRemoved: boolean };
+  error?: string;
+};
+
+/**
+ * Delete a pin, permanently. Only its author can, and — as everywhere else in
+ * this file — that is enforced by the query's own filter rather than by a check
+ * up here: `removePin` passes the session's id into `deletePin`, which only
+ * matches a row that already belongs to it.
+ *
+ * Returns an error string rather than throwing, because the caller is a dialog
+ * that has to say something when this fails. It does NOT redirect: the button
+ * knows where the user should end up (their pins, or wherever they were), and a
+ * redirect from here would take that decision away from every future caller.
+ */
+export async function deletePinAction(pinId: string): Promise<DeletePinResult> {
+  const user = await currentUser();
+  if (!user) return { error: "You must be signed in to delete a pin." };
+
+  let removed;
+  try {
+    removed = await removePin(pinId, user.id);
+  } catch (error) {
+    console.error("deletePinAction: delete failed:", error);
+    return { error: "Couldn't delete that. Try again." };
+  }
+
+  // Either it was never there or it isn't yours. The button is only rendered
+  // for the author, so in practice this is a pin already deleted in another
+  // tab — "gone" is the honest answer to both.
+  if (!removed) return { error: "That pin is already gone." };
+
+  revalidatePinSurfaces(pinId);
+
+  return {
+    deleted: { id: removed.id, title: removed.title, fileRemoved: removed.fileRemoved },
+  };
+}
+
 export type ToggleFavoriteResult = {
   favorited?: boolean;
   error?: string;
@@ -247,8 +277,7 @@ export async function setPinVisibilityAction(
   const updated = await updatePinVisibility(pinId, user.id, parseVisibility(visibility));
   if (!updated) return { error: "That's not your pin." };
 
-  revalidatePinSurfaces();
-  revalidatePath(`/pin/${pinId}`);
+  revalidatePinSurfaces(pinId);
 
   return { visibility: updated.visibility };
 }

@@ -21,6 +21,11 @@ type PinGridProps = {
    * behaviour visible instead of mysterious.
    */
   captions?: Record<string, string>;
+  /**
+   * Passed straight to each card: the viewer's id, when this grid is inside the
+   * dashboard. Their own pins then open in the dashboard's own detail view.
+   */
+  manageOwnerId?: string;
 };
 
 export default function PinGrid({
@@ -29,6 +34,7 @@ export default function PinGrid({
   signedIn,
   empty,
   captions,
+  manageOwnerId,
 }: PinGridProps) {
   if (pins.length === 0 && empty) return <>{empty}</>;
 
@@ -47,6 +53,7 @@ export default function PinGrid({
           favorited={favorites.has(pin.id)}
           signedIn={signedIn}
           caption={captions?.[pin.id]}
+          manageOwnerId={manageOwnerId}
         />
       ))}
     </div>

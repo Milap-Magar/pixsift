@@ -116,3 +116,38 @@ export async function uploadImage(
     format: result.format,
   };
 }
+
+/**
+ * Deletes one uploaded asset, by the `publicId` we stored on the pin.
+ *
+ * Returns whether Cloudinary actually removed something. `not found` is NOT an
+ * error here: an asset deleted in the Cloudinary console, or a retried request
+ * whose first attempt got through, should both leave the caller able to finish
+ * its own cleanup rather than fail on work that is already done.
+ *
+ * Only ever call this with a `publicId` read back off a pin the caller has just
+ * proved it owns. A public id taken from the request would let anyone name any
+ * asset in the account and have us delete it.
+ */
+export async function destroyImage(publicId: string): Promise<boolean> {
+  if (!isCloudinaryConfigured()) {
+    throw new Error(
+      `Cloudinary isn't configured. Add ${missingCloudinaryEnv().join(", ")} to .env.`,
+    );
+  }
+
+  ensureConfigured();
+
+  // `invalidate` clears the CDN copies too. Without it the file stays reachable
+  // at its delivery URL — cached at the edge — for as long as the cache holds
+  // it, which is not what "delete" means to the person who asked for it.
+  const result = await cloudinary.uploader.destroy(publicId, {
+    resource_type: "image",
+    invalidate: true,
+  });
+
+  if (result.result === "ok") return true;
+  if (result.result === "not found") return false;
+
+  throw new Error(`Cloudinary refused to delete ${publicId}: ${result.result}`);
+}

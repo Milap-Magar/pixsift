@@ -116,6 +116,19 @@ export function getFavoriteCount(pinId: string): number {
   return count;
 }
 
+/**
+ * Forget a pin everywhere it was saved. Called when the pin is deleted.
+ *
+ * Reads that go through `getPinsByIds` already skip an id with no row behind it,
+ * so this isn't what keeps a deleted pin out of the grid. It's for the two
+ * places that count ids without resolving them — `getFavoriteCount`, and the
+ * collaborative filter, which would otherwise keep recommending an image nobody
+ * can open on the strength of saves of something that no longer exists.
+ */
+export function forgetPin(pinId: string): void {
+  for (const set of favorites.values()) set.delete(pinId);
+}
+
 /** Saves the pin if it wasn't saved, un-saves it if it was. */
 export function toggleFavorite(userId: string, pinId: string): { favorited: boolean } {
   let set = favorites.get(userId);

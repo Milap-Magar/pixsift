@@ -360,6 +360,7 @@ const LIST_PROJECTION = {
   author: 1,
   authorId: 1,
   createdAt: 1,
+  source: 1,
   publicId: 1,
   width: 1,
   height: 1,
@@ -397,6 +398,12 @@ const MAX_SCAN = 500;
  */
 export type SavedPin = Pin & {
   thumbUrl?: string;
+  /**
+   * Where the row came from. Read by the UI to tell a photo we host from one we
+   * merely point at — which is the difference between a delete that removes the
+   * file and one that only removes the row.
+   */
+  source: PinDoc["source"];
   provider?: PinDoc["provider"];
   providerId?: string;
   providerPageUrl?: string;
@@ -420,6 +427,9 @@ export function toPin(doc: PinDoc): SavedPin {
     author: doc.author,
     authorId: doc.authorId,
     createdAt: doc.createdAt.getTime(),
+    // `?? "link"` for a row written before `source` existed: no publicId of ours
+    // means nothing of ours to delete, which is exactly what `link` promises.
+    source: doc.source ?? (doc.publicId ? "upload" : "link"),
     publicId: doc.publicId,
     width: doc.width,
     height: doc.height,
@@ -792,6 +802,35 @@ export async function updatePinVisibility(
     { _id: id, authorId },
     { $set: { visibility } },
     { returnDocument: "after", projection: LIST_PROJECTION },
+  );
+
+  return doc ? toPin(doc) : null;
+}
+
+/**
+ * Delete one pin. Returns what was removed, or `null` if there is no such pin
+ * **owned by this author** — the caller passes the id from the request and the
+ * author id from the session, never an author id off the wire.
+ *
+ * Ownership lives in the filter, exactly as in `updatePinVisibility`, and here
+ * the reason is sharper than saving a round trip: a read-then-delete leaves a
+ * window in which the row can change between the two, and the thing being
+ * checked in that window is "may I destroy this".
+ *
+ * It returns the document rather than a boolean because the deletion isn't over
+ * yet. The row is gone but the image may still be in Cloudinary, and its
+ * `publicId` only existed on the row we just removed — so it goes out with the
+ * result, while the caller can still act on it.
+ *
+ * A hard delete, not a flag. `docs/ROADMAP.md` lists soft delete with a restore
+ * window as a later item; when it lands, this is the function it replaces.
+ */
+export async function deletePin(id: string, authorId: string): Promise<SavedPin | null> {
+  const pins = await pinsCollection();
+
+  const doc = await pins.findOneAndDelete(
+    { _id: id, authorId },
+    { projection: LIST_PROJECTION },
   );
 
   return doc ? toPin(doc) : null;

@@ -47,7 +47,11 @@ Real defects in the code today, not hypotheticals. Roughly worst first.
 
 ## 1.2 Things users will immediately try and fail to do
 
-- [ ] **You cannot delete a pin.** Ever. Not even your own — **S** 🗄️
+- [X] **Delete a pin** — author-only, from `/dashboard/pins/[id]` or your own
+      pin's public page, and `DELETE /api/pins/{id}` for the same thing over
+      HTTP. Removes the row, its comments, everyone's saves, and — for a pin
+      you uploaded — the Cloudinary asset. No undo yet; soft delete with a
+      restore window is still in 2.9
 - [ ] **You cannot edit a pin** — fix a typo in a title, change a description — **S** 🗄️
 - [ ] **You cannot delete your own comment** — **S** 🗄️
 - [ ] **Author names aren't clickable.** `pin.author` is plain text in

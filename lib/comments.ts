@@ -103,6 +103,30 @@ export function addComment(input: {
   return comment;
 }
 
+/**
+ * Drop a pin's whole thread. Called when the pin itself is deleted — a comment
+ * on something that no longer exists has nowhere to render, and leaving it here
+ * would keep the pin present in `countCommentsByAuthor` and in the dashboard
+ * totals built on it.
+ *
+ * The listeners are left alone on purpose: an open SSE stream for a deleted pin
+ * unsubscribes itself when the client disconnects, and tearing the set down here
+ * wouldn't close those connections anyway.
+ */
+export function removeComments(pinId: string): number {
+  let removed = 0;
+
+  // Backwards, so the splice never shifts an index we haven't looked at yet.
+  for (let index = comments.length - 1; index >= 0; index--) {
+    if (comments[index].pinId === pinId) {
+      comments.splice(index, 1);
+      removed++;
+    }
+  }
+
+  return removed;
+}
+
 /** Returns an unsubscribe function — call it when the stream closes. */
 export function subscribe(pinId: string, listener: Listener): () => void {
   let set = listeners.get(pinId);

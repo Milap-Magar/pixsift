@@ -13,6 +13,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Copy, Lock, Palette, Share2 } from "lucide-react";
 
+import DeletePinButton from "@/app/components/delete-pin-button";
 import DownloadMenu from "@/app/components/download-menu";
 import HashGrid from "@/app/components/hash-grid";
 import PaletteStrip from "@/app/components/palette-strip";
@@ -145,10 +146,26 @@ export default async function PinDetailsPage({
                 className={actionButtonClasses}
               />
 
-              {/* Only the author gets this, and the Server Action behind it
-                  re-checks ownership — the missing button is the courtesy, the
-                  check in updatePinVisibility is the rule. */}
-              {isOwner && <VisibilityToggle pinId={pin.id} visibility={pin.visibility} />}
+              {/* Only the author gets these, and the Server Actions behind
+                  them re-check ownership — the missing button is the courtesy,
+                  the check in the query is the rule.
+
+                  Delete is here as well as in the dashboard because this is
+                  where you end up when you follow your own link from somewhere
+                  else, and "go to the dashboard first" is a poor answer to
+                  "get this photo off the internet". It lands you on your pins
+                  afterwards, since this page is about to stop existing. */}
+              {isOwner && (
+                <>
+                  <VisibilityToggle pinId={pin.id} visibility={pin.visibility} />
+                  <DeletePinButton
+                    pinId={pin.id}
+                    pinTitle={pin.title}
+                    removesFile={pin.source === "upload"}
+                    redirectTo="/dashboard/pins"
+                  />
+                </>
+              )}
 
               <SharePanel
                 title={pin.title}

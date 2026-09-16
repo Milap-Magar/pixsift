@@ -297,6 +297,7 @@ export default async function DashboardPage() {
           pins={stats.myPins.slice(0, 12)}
           favoriteIds={favoriteIds}
           signedIn
+          manageOwnerId={user.id}
           empty={
             <Empty
               icon={<ImagePlus className="size-6 text-muted-foreground" />}

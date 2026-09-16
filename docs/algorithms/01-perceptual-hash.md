@@ -24,7 +24,7 @@ Re-save a JPEG at quality 90 instead of 95 and every bit of its SHA-256 changes,
 while the photograph is identical to a human eye. The avalanche property that
 makes SHA-256 good at its job makes it useless at this one. We need the opposite
 property, so we need a different construction.
-
+dct - discrete cosine transform
 ---
 
 ## 2. The pipeline

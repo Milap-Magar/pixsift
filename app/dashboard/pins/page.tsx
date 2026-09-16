@@ -129,6 +129,9 @@ export default async function MyPinsPage({
         pins={sorted}
         favoriteIds={[...getFavoriteIds(user.id)]}
         signedIn
+        // Every pin here is yours, so every tile opens in the dashboard's own
+        // detail view — the one with the visibility switch and Delete on it.
+        manageOwnerId={user.id}
         empty={
           <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border py-20 text-center">
             <ImagePlus className="size-7 text-muted-foreground" />

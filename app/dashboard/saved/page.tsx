@@ -46,6 +46,9 @@ export default async function SavedPage() {
         pins={pins}
         favoriteIds={favoriteIds}
         signedIn
+        // A mixed grid: your own saved pins open in the dashboard, other
+        // people's open on their public page, where all you can do is look.
+        manageOwnerId={user.id}
         empty={
           <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border py-20 text-center">
             <Heart className="size-7 text-muted-foreground" />

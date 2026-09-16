@@ -148,6 +148,53 @@ export const openApiSpec = {
         },
       },
     },
+    "/api/pins/{id}": {
+      delete: {
+        tags: ["Pins"],
+        summary: "Delete a pin (author only)",
+        description:
+          "Removes the pin, its comments, and everyone's saves of it. For a " +
+          "pin you UPLOADED, the Cloudinary asset is destroyed too (and the " +
+          "CDN copies invalidated); a pin that links to someone else's image, " +
+          "or a seeded one, leaves the file alone — `fileRemoved` in the " +
+          "response says which happened.\n\n" +
+          "Ownership is part of the delete's own filter, not a check before " +
+          "it, so there is no window between the two. Someone else's public " +
+          "pin answers 403; a private pin you can't see answers 404, which is " +
+          "the same answer it gives everywhere else.\n\n" +
+          "This is a hard delete — there is no undo.",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": {
+            description: "Pin deleted",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    deleted: {
+                      type: "object",
+                      properties: {
+                        id: { type: "string", example: "a-calm-sunset-3f9a2b" },
+                        title: { type: "string", example: "A calm sunset" },
+                      },
+                    },
+                    fileRemoved: {
+                      type: "boolean",
+                      description: "Whether a Cloudinary asset was destroyed as well.",
+                    },
+                    commentsRemoved: { type: "integer", example: 3 },
+                  },
+                },
+              },
+            },
+          },
+          "401": { description: "Not signed in" },
+          "403": { description: "The pin exists, but it isn't yours" },
+          "404": { description: "No such pin, or not yours to see" },
+        },
+      },
+    },
     "/api/pins/{id}/download": {
       get: {
         tags: ["Pins", "Downloads"],

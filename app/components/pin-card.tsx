@@ -1,8 +1,14 @@
 // One tile in the masonry grid.
 //
-// The whole card links through to /pin/[id]. The heart sits OUTSIDE that link
-// rather than inside it — nesting a button in an anchor is invalid, and it would
-// navigate away the moment you tried to save.
+// The whole card links through to the pin's page. The heart sits OUTSIDE that
+// link rather than inside it — nesting a button in an anchor is invalid, and it
+// would navigate away the moment you tried to save.
+//
+// WHICH page depends on who is looking. Your own photo, seen from the
+// dashboard, opens in the dashboard — where the controls for it are (rename
+// pending, visibility, delete) — instead of throwing you out to the public
+// gallery view and leaving you to navigate back. Everyone else's opens at
+// /pin/[id] as before. See `manageOwnerId`.
 
 import Link from "next/link";
 import { Lock } from "lucide-react";
@@ -20,13 +26,31 @@ type PinCardProps = {
   signedIn: boolean;
   /** Optional "why you're seeing this" line — supplied by the recommender. */
   caption?: string;
+  /**
+   * The viewer, when this grid is inside the dashboard. A pin authored by them
+   * then links to its management view rather than its public page.
+   *
+   * A plain id rather than a `hrefFor` callback so the rule is stated once here
+   * instead of in each page, and so the prop survives a client boundary —
+   * <InfinitePinGrid> renders this same card.
+   */
+  manageOwnerId?: string;
 };
 
 const heartButtonClasses =
   "absolute top-3 right-3 z-10 grid size-9 cursor-pointer place-items-center rounded-full bg-white/85 text-zinc-700 shadow-md backdrop-blur transition hover:scale-105 hover:bg-white focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:outline-none dark:bg-black/60 dark:text-zinc-200 dark:hover:bg-black/80";
 
-export default function PinCard({ pin, favorited, signedIn, caption }: PinCardProps) {
-  const href = `/pin/${encodeURIComponent(pin.id)}`;
+export default function PinCard({
+  pin,
+  favorited,
+  signedIn,
+  caption,
+  manageOwnerId,
+}: PinCardProps) {
+  const href =
+    manageOwnerId && pin.authorId === manageOwnerId
+      ? `/dashboard/pins/${encodeURIComponent(pin.id)}`
+      : `/pin/${encodeURIComponent(pin.id)}`;
 
   // Reserve the tile's exact shape before the image loads, so the masonry
   // doesn't reflow as photos arrive — the layout-shift problem Gate 4 calls
