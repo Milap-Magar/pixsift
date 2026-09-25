@@ -4,7 +4,10 @@
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-05-05",
   "compatibility_flags": [
-    "nodejs_compat"
+    "nodejs_compat",
+    // Required by OpenNext: makes fetches to our own hostname go out through
+    // the public internet instead of looping back inside the Worker.
+    "global_fetch_strictly_public"
   ],
   "assets": {
     "directory": ".open-next/assets",
